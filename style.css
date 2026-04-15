@@ -1057,3 +1057,17 @@ body {
   .word-list { grid-template-columns: 1fr; }
   .main { padding: 16px 12px 40px; }
 }
+/* ---- Bulk Import Textarea ---- */
+#import-textarea {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  background: #f8fafc;
+  border: 1px dashed var(--border-accent);
+  padding: 16px;
+  color: var(--text-primary);
+}
+#import-textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}

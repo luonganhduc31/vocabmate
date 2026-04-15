@@ -81,6 +81,9 @@
             </button>
             <button type="button" class="btn btn-ghost" id="btn-cancel-edit" onclick="cancelEdit()" style="display:none">Hủy</button>
           </div>
+          <button type="button" class="btn btn-outline" style="width:100%; margin-top:12px; justify-content:center;" onclick="openImportModal()">
+            📥 Nhập hàng loạt (từ Word/Excel)
+          </button>
         </form>
       </div>
 
@@ -229,6 +232,32 @@
   <div id="category-modal" class="modal-overlay hidden" onclick="closeCategoryModal(event)">
     <div class="modal" id="category-modal-content">
       <!-- Rendered by JS -->
+    </div>
+  </div>
+
+  <!-- Bulk Import modal -->
+  <div id="import-modal" class="modal-overlay hidden" onclick="closeImportModal(event)">
+    <div class="modal" style="max-width: 800px; width: 95%;">
+      <div class="modal-icon">📥</div>
+      <h3>Nhập từ vựng hàng loạt</h3>
+      <p>Mẹo: Copy bảng từ Word/Excel rồi dán vào ô dưới đây. Các cột sẽ tự động nhận diện.</p>
+      
+      <div class="form-group" style="text-align: left; margin-top: 16px;">
+        <label>1. Chọn chủ đề cho các từ này:</label>
+        <select id="import-category-select"></select>
+      </div>
+
+      <div class="form-group" style="text-align: left;">
+        <label>2. Dán nội dung bảng vào đây:</label>
+        <textarea id="import-textarea" rows="10" placeholder="English	Pronunciation	Vietnamese	Example (Ngăn cách bởi phím Tab khi copy từ bảng)" style="width: 100%; white-space: pre; overflow-x: auto;"></textarea>
+      </div>
+
+      <div id="import-stats" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;"></div>
+
+      <div class="modal-buttons">
+        <button class="btn btn-ghost" onclick="closeImportModal()">Hủy bỏ</button>
+        <button class="btn btn-primary" onclick="processBulkImport()">⚡ Tiến hành nhập</button>
+      </div>
     </div>
   </div>
 

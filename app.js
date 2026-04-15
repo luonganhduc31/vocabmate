@@ -77,10 +77,18 @@ function getCatLabel(catId) {
 }
 
 function renderCategorySelect() {
-  const select = document.getElementById('input-category');
-  select.innerHTML = categories.map(c =>
+  const selects = [
+    document.getElementById('input-category'),
+    document.getElementById('import-category-select')
+  ];
+  
+  const optionsHtml = categories.map(c =>
     `<option value="${escHtml(c.id)}">${escHtml(c.name)}</option>`
   ).join('');
+
+  selects.forEach(s => {
+    if (s) s.innerHTML = optionsHtml;
+  });
 }
 
 function renderFilterChips() {
@@ -210,6 +218,77 @@ function promptDeleteCategory(catId, catName) {
     deleteCategory(catId);
     closeCategoryModal();
     openCategoryModal('manage'); // refresh
+  }
+}
+
+// ── Bulk Import ────────────────────────────────────────────
+function openImportModal() {
+  const modal = document.getElementById('import-modal');
+  modal.classList.remove('hidden');
+  renderCategorySelect(); // Ensure categories match
+  document.getElementById('import-textarea').value = '';
+  document.getElementById('import-stats').textContent = '';
+}
+
+function closeImportModal(e) {
+  if (e && e.target !== document.getElementById('import-modal')) return;
+  document.getElementById('import-modal').classList.add('hidden');
+}
+
+function processBulkImport() {
+  const text = document.getElementById('import-textarea').value.trim();
+  const catId = document.getElementById('import-category-select').value;
+  
+  if (!text) {
+    alert('Vui lòng dán nội dung vào ô nhập liệu!');
+    return;
+  }
+
+  const lines = text.split('\n');
+  let count = 0;
+  
+  // To avoid ID collisions during rapid batch add
+  let baseId = Date.now();
+
+  lines.forEach((line, index) => {
+    if (!line.trim()) return;
+
+    // Split logic: Tab is standard for Word/Excel. 
+    // Fallback split by 2+ spaces or semicolons
+    let parts = line.split('\t');
+    if (parts.length < 2) parts = line.split(/ {2,}/);
+    if (parts.length < 2) parts = line.split(';');
+
+    if (parts.length >= 2) {
+      const en = parts[0]?.trim();
+      const ipa = parts[1]?.trim();
+      const vi = parts[2]?.trim() || '';
+      const ex = parts[3]?.trim() || '';
+
+      if (en) {
+        vocab.unshift({
+          id: baseId + index + Math.random(),
+          en: en,
+          pronunciation: ipa,
+          vi: vi || en, // Fallback to EN if VI missing
+          example: ex,
+          category: catId,
+          known: false
+        });
+        count++;
+      }
+    }
+  });
+
+  if (count > 0) {
+    saveToStorage();
+    applyFilters();
+    renderWordList();
+    updateStats();
+    alert(`✅ Thành công! Đã nhập ${count} từ vựng vào hệ thống.`);
+    closeImportModal();
+  } else {
+    alert('❌ Không tìm thấy dữ liệu hợp lệ. Lưu ý: Cần có ít nhất cột Từ vựng và Phiên âm/Nghĩa.');
   }
 }
 
