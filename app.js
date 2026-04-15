@@ -772,6 +772,8 @@ function exitQuiz() {
 
 // ── Share Link ─────────────────────────────────────────────
 // ── Share Link ─────────────────────────────────────────────
+const BIN_ID_KEY = 'vocabmate_json_id';
+
 async function shareVocab() {
   if (vocab.length === 0) {
     alert('Bạn chưa có từ nào để chia sẻ!');
@@ -782,45 +784,175 @@ async function shareVocab() {
   const originalHtml = btn.innerHTML;
   
   try {
-    btn.innerHTML = '⌛ Đang tạo link...';
+    btn.innerHTML = '⌛ Đang tạo mã QR...';
     btn.disabled = true;
 
-    // Chuẩn bị dữ liệu nén trước để làm dự phòng
+    const existingId = localStorage.getItem(BIN_ID_KEY);
+    let finalUrl = "";
+
+    // 1. Tạo dữ liệu dự phòng (lz)
     const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(vocab));
     const fallbackUrl = `${location.origin}${location.pathname}?lz=${compressed}`;
 
     try {
-      // Thử tạo link ID siêu ngắn (Ưu tiên)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 giây timeout
+      // 2. Thử lưu lên server (JsonBlob hoặc npoint) để lấy link ngắn
+      let response;
+      if (existingId) {
+        // Cập nhật kho cũ
+        response = await fetch(`https://jsonblob.com/api/jsonBlob/${existingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(vocab)
+        });
+      }
 
-      const response = await fetch('https://api.npoint.io/bins', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(vocab),
-        signal: controller.signal
-      });
+      if (!existingId || !response.ok) {
+        // Tạo kho mới
+        response = await fetch('https://jsonblob.com/api/jsonBlob', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(vocab)
+        });
+        if (response.ok) {
+          const locationHeader = response.headers.get('Location');
+          const newId = locationHeader.split('/').pop();
+          localStorage.setItem(BIN_ID_KEY, newId);
+        }
+      }
 
       if (response.ok) {
-        const result = await response.json();
-        const shortUrl = `${location.origin}${location.pathname}?bin=${result.key}`;
-        await navigator.clipboard.writeText(shortUrl);
-        showToast("✅ Đã tạo link siêu ngắn!");
+        const id = localStorage.getItem(BIN_ID_KEY);
+        finalUrl = `${location.origin}${location.pathname}?bin=${id}`;
       } else {
         throw new Error();
       }
     } catch (err) {
-      // Nếu server lỗi, dùng link nén (Dự phòng)
-      await navigator.clipboard.writeText(fallbackUrl);
-      showToast("⚠️ Server bận - Đã dùng link nén dự phòng");
+      finalUrl = fallbackUrl; // Dùng link nén nếu server lỗi
     }
+
+    // 3. Copy link và Hiện mã QR (Dùng ảnh trực tiếp cho chắc chắn)
+    await navigator.clipboard.writeText(finalUrl);
+    showToast(finalUrl.includes('bin') ? "✅ Đã tạo mã QR siêu ngắn!" : "⚠️ Link hơi dài - Đang tạo mã QR...");
+    showQRCodeImage(finalUrl);
+
   } catch (e) {
     console.error(e);
-    alert('❌ Không thể copy link. Hãy thử lại.');
+    alert('Không thể tạo mã QR. Hãy thử lại.');
   } finally {
     btn.innerHTML = originalHtml;
     btn.disabled = false;
   }
+}
+
+function showQRCodeImage(url) {
+  const modal = document.getElementById('qr-modal');
+  const container = document.getElementById('qrcode-container');
+  const linkDisplay = document.getElementById('qr-link-display');
+  
+  modal.classList.remove('hidden');
+  linkDisplay.textContent = url;
+  
+  // Dùng dịch vụ tạo ảnh QR của API quốc tế (Đảm bảo luôn hiện ảnh)
+  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(url)}`;
+  
+  container.innerHTML = `
+    <div style="text-align:center">
+      <img src="${qrImageUrl}" alt="QR Code" style="width:250px; height:250px; border:none;" 
+           onload="console.log('QR Loaded')" 
+           onerror="this.parentElement.innerHTML='⚠️ Lỗi mạng không thể tải ảnh QR. Hày copy link dưới.'">
+    </div>
+  `;
+}
+
+// ── File Sharing (Way 3) ───────────────────────────────────
+function exportToFile() {
+  if (vocab.length === 0) {
+    alert('Không có dữ liệu để xuất!');
+    return;
+  }
+  
+  // Trọn gói dữ liệu
+  const bundle = {
+    words: vocab,
+    categories: categories,
+    exportDate: new Date().toISOString()
+  };
+  
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  
+  a.href = url;
+  a.download = `TuVung_CuaToi_${new Date().toLocaleDateString().replace(/\//g, '-')}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  showToast("✅ Đã tải file dữ liệu về máy!");
+}
+
+function triggerFileInput() {
+  document.getElementById('import-file-input').click();
+}
+
+function importFromFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      
+      // Kiểm tra cấu trúc file
+      let newWords = [];
+      let newCats = [];
+      
+      if (Array.isArray(data)) {
+        newWords = data; // Bản cũ chỉ có array words
+      } else if (data.words && Array.isArray(data.words)) {
+        newWords = data.words;
+        newCats = data.categories || [];
+      }
+      
+      if (newWords.length === 0) {
+        alert("File này không có từ vựng nào!");
+        return;
+      }
+      
+      if (confirm(`Tìm thấy ${newWords.length} từ. Bạn có muốn nạp vào máy không? (Dữ liệu cũ sẽ được gộp chung)`)) {
+        // Gộp dữ liệu (tránh trùng)
+        const existingIds = new Set(vocab.map(w => w.id));
+        newWords.forEach(w => {
+           if (!existingIds.has(w.id)) vocab.push(w);
+        });
+        
+        // Gộp chủ đề
+        if (newCats.length > 0) {
+          const catIds = new Set(categories.map(c => c.id));
+          newCats.forEach(c => {
+            if (!catIds.has(c.id)) categories.push(c);
+          });
+        }
+        
+        saveToStorage();
+        saveCategories();
+        applyFilters();
+        renderWordList();
+        renderCategorySelect();
+        renderFilterChips();
+        updateStats();
+        
+        showToast("✅ Nạp dữ liệu hoàn tất!");
+      }
+    } catch (err) {
+      alert("Lỗi: File này không đúng định dạng dữ liệu của ứng dụng.");
+    }
+    // Reset input để có thể chọn lại file cũ nếu cần
+    event.target.value = "";
+  };
+  reader.readAsText(file);
 }
 
 function showToast(message) {

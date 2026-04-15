@@ -81,6 +81,13 @@
             </button>
             <button type="button" class="btn btn-ghost" id="btn-cancel-edit" onclick="cancelEdit()" style="display:none">Hủy</button>
           </div>
+          
+          <div class="file-sync-zone" style="margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border); display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <button type="button" class="btn btn-outline" style="font-size: 12px; justify-content: center;" onclick="exportToFile()">📤 Xuất file</button>
+            <button type="button" class="btn btn-outline" style="font-size: 12px; justify-content: center;" onclick="triggerFileInput()">📥 Nạp file</button>
+            <input type="file" id="import-file-input" style="display: none;" accept=".json" onchange="importFromFile(event)" />
+          </div>
+
           <button type="button" class="btn btn-outline" style="width:100%; margin-top:12px; justify-content:center;" onclick="openImportModal()">
             📥 Nhập hàng loạt (từ Word/Excel)
           </button>
@@ -268,8 +275,26 @@
     </div>
   </div>
 
+  <!-- QR Code Modal -->
+  <div id="qr-modal" class="modal-overlay hidden" onclick="closeQRModal(event)">
+    <div class="modal" style="max-width: 400px; text-align: center;">
+      <div class="modal-icon">📱</div>
+      <h3>Mã QR Chia sẻ</h3>
+      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px;">Đưa điện thoại lại gần để quét bộ từ vựng này nhé!</p>
+      
+      <div id="qrcode-container" style="display: flex; justify-content: center; margin-bottom: 20px; padding: 15px; background: white; border-radius: 12px; border: 1px solid #e2e8f0;"></div>
+      
+      <div id="qr-link-display" style="font-size: 11px; word-break: break-all; color: var(--primary); margin-bottom: 20px; font-family: monospace; background: #f8fafc; padding: 8px; border-radius: 6px;"></div>
+
+      <div class="modal-buttons">
+        <button class="btn btn-primary" style="width: 100%;" onclick="closeQRModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/davidshimjs-qrcodejs/0.0.2/qrcode.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
