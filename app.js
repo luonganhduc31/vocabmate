@@ -89,6 +89,11 @@ function renderCategorySelect() {
   selects.forEach(s => {
     if (s) s.innerHTML = optionsHtml;
   });
+
+  const quizSelect = document.getElementById('quiz-category-select');
+  if (quizSelect) {
+    quizSelect.innerHTML = `<option value="random50">🎲 Ngẫu nhiên (50 từ)</option>` + optionsHtml;
+  }
 }
 
 function renderFilterChips() {
@@ -475,6 +480,12 @@ function switchTab(tab, btn) {
   if (tab === 'quiz')      resetQuizToStart();
 }
 
+function goToHome() {
+  switchTab('list', document.getElementById('tab-list'));
+  resetQuizToStart();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 // ── Flashcard ──────────────────────────────────────────────
 function initFlashcard() {
   fcDeck  = shuffle([...vocab]);
@@ -572,12 +583,22 @@ function resetQuizToStart() {
 }
 
 function startQuiz() {
-  if (vocab.length < 2) {
-    alert('Bạn cần ít nhất 2 từ để bắt đầu Quiz!');
+  const catChoice = document.getElementById('quiz-category-select').value;
+  let quizPool = [];
+
+  if (catChoice === 'random50') {
+    quizPool = shuffle([...vocab]).slice(0, 50);
+  } else {
+    quizPool = vocab.filter(w => w.category === catChoice);
+  }
+
+  if (quizPool.length < 2) {
+    alert('Không đủ từ trong danh sách này! Bạn cần ít nhất 2 từ để làm Quiz.');
     return;
   }
+
   quizType      = document.querySelector('input[name="quiz-type"]:checked').value;
-  quizQuestions = buildQuestions(quizType);
+  quizQuestions = buildQuestions(quizType, quizPool);
   quizIndex     = 0;
   quizScore     = 0;
   waitingNext   = false;
@@ -590,8 +611,9 @@ function startQuiz() {
   renderQuestion();
 }
 
-function buildQuestions(type) {
-  const qs = shuffle([...vocab]).slice(0, Math.min(vocab.length, 15));
+function buildQuestions(type, pool) {
+  pool = pool || shuffle([...vocab]).slice(0, Math.min(vocab.length, 15));
+  const qs = shuffle([...pool]);
   return qs.map(word => {
     const distractors = vocab.filter(w => w.id !== word.id);
     if (type === 'fill') {
@@ -740,6 +762,12 @@ function showQuizResult() {
 function backToQuizStart() {
   document.getElementById('quiz-result').classList.add('hidden');
   document.getElementById('quiz-start').style.display = 'block';
+}
+
+function exitQuiz() {
+  if (confirm('Bạn có chắc muốn thoát Quiz? Tiến trình hiện tại sẽ bị hủy.')) {
+    goToHome();
+  }
 }
 
 // ── Share Link ─────────────────────────────────────────────

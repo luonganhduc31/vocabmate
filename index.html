@@ -14,7 +14,7 @@
   <!-- Header -->
   <header class="header">
     <div class="header-inner">
-      <div class="logo">
+      <div class="logo" style="cursor: pointer;" onclick="goToHome()">
         <span class="logo-icon">📚</span>
         <span class="logo-text">VocabMate</span>
       </div>
@@ -177,13 +177,20 @@
             <label class="quiz-option-label"><input type="radio" name="quiz-type" value="choose" id="quiz-type-choose" /> 🎯 Chọn nghĩa đúng</label>
             <label class="quiz-option-label"><input type="radio" name="quiz-type" value="vi2en" id="quiz-type-vi2en" /> 🔄 Dịch Việt → Anh</label>
           </div>
+          <div class="form-group" style="max-width: 300px; margin: 16px auto; text-align: left;">
+            <label style="color: var(--text-secondary); font-size: 12px; font-weight: 600;">Phạm vi kiểm tra</label>
+            <select id="quiz-category-select"></select>
+          </div>
           <button class="btn btn-primary btn-lg" onclick="startQuiz()" id="btn-start-quiz">🚀 Bắt đầu Quiz</button>
         </div>
         <div id="quiz-area" class="quiz-area hidden">
           <div class="quiz-header">
-            <div class="quiz-score-row">
-              <span>Điểm: <strong id="quiz-score">0</strong></span>
-              <span><span id="quiz-q-num">1</span>/<span id="quiz-q-total">0</span></span>
+            <div class="quiz-score-row" style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <span>Điểm: <strong id="quiz-score">0</strong></span>
+                <span style="margin-left: 8px;"><span id="quiz-q-num">1</span>/<span id="quiz-q-total">0</span></span>
+              </div>
+              <button class="btn btn-danger-outline btn-sm" onclick="exitQuiz()">🚪 Thoát</button>
             </div>
             <div class="quiz-score-bar-wrap"><div class="quiz-score-bar" id="quiz-score-bar"></div></div>
           </div>
