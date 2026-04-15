@@ -1,17 +1,28 @@
 /* ============================================================
    VocabMate – app.js
-   Features: CRUD, localStorage, Share link (URL-encoded),
-             Flashcard (flip + mark), Quiz (3 modes)
+   Features: CRUD words, CRUD categories, localStorage,
+             Share link, Flashcard, Quiz (3 modes)
    ============================================================ */
 
 'use strict';
 
 // ── State ──────────────────────────────────────────────────
-let vocab        = [];          // [{id, en, pronunciation, vi, example, category, known}]
-let filteredList = [];          // currently shown in list tab
+let vocab        = [];
+let filteredList  = [];
 let currentCategory = 'all';
-let searchQuery = '';
-let editingId = null;
+let searchQuery  = '';
+let editingId    = null;
+
+// Categories: stored in localStorage, user can add/edit/delete
+const DEFAULT_CATEGORIES = [
+  { id: 'general',    name: 'Tổng hợp' },
+  { id: 'business',   name: 'Kinh doanh' },
+  { id: 'travel',     name: 'Du lịch' },
+  { id: 'academic',   name: 'Học thuật' },
+  { id: 'daily',      name: 'Hàng ngày' },
+  { id: 'technology', name: 'Công nghệ' },
+];
+let categories = [];
 
 // Flashcard
 let fcDeck  = [];
@@ -27,28 +38,180 @@ let waitingNext   = false;
 // Delete modal
 let deleteTargetId = null;
 
-// Shared vocab (from URL)
+// Shared vocab
 let sharedVocab = null;
 
-const STORAGE_KEY = 'vocabmate_words';
-
-// ── Category labels ────────────────────────────────────────
-const CAT_LABELS = {
-  general:    'Tổng hợp',
-  business:   'Kinh doanh',
-  travel:     'Du lịch',
-  academic:   'Học thuật',
-  daily:      'Hàng ngày',
-  technology: 'Công nghệ',
-};
+const STORAGE_KEY     = 'vocabmate_words';
+const CATEGORIES_KEY  = 'vocabmate_categories';
 
 // ── Init ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  loadCategories();
   loadFromStorage();
   checkSharedURL();
+  renderCategorySelect();
+  renderFilterChips();
   renderWordList();
   updateStats();
 });
+
+// ── Categories CRUD ────────────────────────────────────────
+function loadCategories() {
+  try {
+    const raw = localStorage.getItem(CATEGORIES_KEY);
+    categories = raw ? JSON.parse(raw) : [...DEFAULT_CATEGORIES];
+  } catch { categories = [...DEFAULT_CATEGORIES]; }
+  // Ensure at least general exists
+  if (!categories.find(c => c.id === 'general')) {
+    categories.unshift({ id: 'general', name: 'Tổng hợp' });
+  }
+}
+
+function saveCategories() {
+  localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+}
+
+function getCatLabel(catId) {
+  const cat = categories.find(c => c.id === catId);
+  return cat ? cat.name : catId;
+}
+
+function renderCategorySelect() {
+  const select = document.getElementById('input-category');
+  select.innerHTML = categories.map(c =>
+    `<option value="${escHtml(c.id)}">${escHtml(c.name)}</option>`
+  ).join('');
+}
+
+function renderFilterChips() {
+  const container = document.getElementById('filter-chips');
+  let html = `<button class="chip ${currentCategory === 'all' ? 'active' : ''}" onclick="filterByCategory('all', this)">Tất cả</button>`;
+  categories.forEach(c => {
+    html += `<button class="chip ${currentCategory === c.id ? 'active' : ''}" onclick="filterByCategory('${escHtml(c.id)}', this)">${escHtml(c.name)}</button>`;
+  });
+  container.innerHTML = html;
+}
+
+function addCategory(name) {
+  name = name.trim();
+  if (!name) return;
+  const id = 'cat_' + Date.now();
+  categories.push({ id, name });
+  saveCategories();
+  renderCategorySelect();
+  renderFilterChips();
+  // Select the new category in the form
+  document.getElementById('input-category').value = id;
+}
+
+function renameCategory(catId, newName) {
+  newName = newName.trim();
+  if (!newName) return;
+  const cat = categories.find(c => c.id === catId);
+  if (cat) {
+    cat.name = newName;
+    saveCategories();
+    renderCategorySelect();
+    renderFilterChips();
+    renderWordList();
+  }
+}
+
+function deleteCategory(catId) {
+  // Don't allow deleting 'general'
+  if (catId === 'general') {
+    alert('Không thể xóa chủ đề "Tổng hợp"!');
+    return;
+  }
+  // Move words in this category to 'general'
+  vocab.forEach(w => {
+    if (w.category === catId) w.category = 'general';
+  });
+  saveToStorage();
+
+  categories = categories.filter(c => c.id !== catId);
+  saveCategories();
+
+  if (currentCategory === catId) currentCategory = 'all';
+  renderCategorySelect();
+  renderFilterChips();
+  renderWordList();
+}
+
+// Category modal
+function openCategoryModal(mode) {
+  const modal = document.getElementById('category-modal');
+  const content = document.getElementById('category-modal-content');
+
+  if (mode === 'add') {
+    content.innerHTML = `
+      <div class="modal-icon">➕</div>
+      <h3>Thêm chủ đề mới</h3>
+      <input class="modal-input" id="new-cat-name" type="text" placeholder="Tên chủ đề..." autofocus onkeydown="if(event.key==='Enter'){confirmAddCategory()}" />
+      <div class="modal-buttons">
+        <button class="btn btn-ghost" onclick="closeCategoryModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="confirmAddCategory()">Thêm</button>
+      </div>
+    `;
+  } else {
+    // Manage mode: list all categories with edit/delete
+    let listHtml = categories.map(c => {
+      const isDefault = c.id === 'general';
+      return `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #e2e8f0;">
+          <span style="flex:1;font-weight:500;">${escHtml(c.name)}</span>
+          <button class="btn btn-ghost btn-sm" onclick="promptRenameCategory('${c.id}','${escHtml(c.name)}')">✏️</button>
+          ${isDefault ? '' : `<button class="btn btn-danger-outline btn-sm" onclick="promptDeleteCategory('${c.id}','${escHtml(c.name)}')">🗑️</button>`}
+        </div>`;
+    }).join('');
+
+    content.innerHTML = `
+      <div class="modal-icon">⚙️</div>
+      <h3>Quản lý chủ đề</h3>
+      <div style="text-align:left;margin-bottom:16px;max-height:300px;overflow-y:auto;">
+        ${listHtml}
+      </div>
+      <div class="modal-buttons">
+        <button class="btn btn-ghost" onclick="closeCategoryModal()">Đóng</button>
+        <button class="btn btn-primary" onclick="closeCategoryModal();openCategoryModal('add')">➕ Thêm mới</button>
+      </div>
+    `;
+  }
+
+  modal.classList.remove('hidden');
+  const input = document.getElementById('new-cat-name');
+  if (input) setTimeout(() => input.focus(), 100);
+}
+
+function closeCategoryModal(e) {
+  if (e && e.target !== document.getElementById('category-modal')) return;
+  document.getElementById('category-modal').classList.add('hidden');
+}
+
+function confirmAddCategory() {
+  const input = document.getElementById('new-cat-name');
+  const name = input ? input.value.trim() : '';
+  if (!name) { alert('Vui lòng nhập tên chủ đề!'); return; }
+  addCategory(name);
+  closeCategoryModal();
+}
+
+function promptRenameCategory(catId, currentName) {
+  const newName = prompt(`Đổi tên chủ đề "${currentName}" thành:`, currentName);
+  if (newName !== null && newName.trim()) {
+    renameCategory(catId, newName);
+    closeCategoryModal();
+    openCategoryModal('manage'); // refresh the list
+  }
+}
+
+function promptDeleteCategory(catId, catName) {
+  if (confirm(`Xóa chủ đề "${catName}"?\n\nCác từ trong chủ đề này sẽ chuyển về "Tổng hợp".`)) {
+    deleteCategory(catId);
+    closeCategoryModal();
+    openCategoryModal('manage'); // refresh
+  }
+}
 
 // ── Storage ────────────────────────────────────────────────
 function loadFromStorage() {
@@ -80,12 +243,11 @@ function handleFormSubmit(e) {
     }
     cancelEdit();
   } else {
-    const word = {
+    vocab.unshift({
       id: Date.now(),
       en, pronunciation, vi, example, category,
       known: false,
-    };
-    vocab.unshift(word);
+    });
   }
 
   saveToStorage();
@@ -108,7 +270,7 @@ function editWord(id) {
 
   document.getElementById('form-title-text').textContent = '✏️ Chỉnh sửa từ';
   document.getElementById('btn-submit').innerHTML =
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Lưu';
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Lưu';
   document.getElementById('btn-cancel-edit').style.display = 'inline-flex';
 
   document.getElementById('input-english').focus();
@@ -120,7 +282,7 @@ function cancelEdit() {
   document.getElementById('vocab-form').reset();
   document.getElementById('form-title-text').textContent = '✏️ Thêm từ mới';
   document.getElementById('btn-submit').innerHTML =
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Thêm từ';
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Thêm từ';
   document.getElementById('btn-cancel-edit').style.display = 'none';
 }
 
@@ -164,7 +326,7 @@ function clearAllWords() {
 function filterByCategory(cat, btn) {
   currentCategory = cat;
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-  btn.classList.add('active');
+  if (btn) btn.classList.add('active');
   applyFilters();
   renderWordList();
 }
@@ -206,11 +368,11 @@ function renderWordList() {
           <div class="word-en">${escHtml(w.en)}</div>
           ${w.pronunciation ? `<div class="word-pronunciation">${escHtml(w.pronunciation)}</div>` : ''}
         </div>
-        ${w.known ? '<span title="Đã nhớ" style="font-size:18px;">✅</span>' : ''}
+        ${w.known ? '<span title="Đã nhớ" style="font-size:16px;">✅</span>' : ''}
       </div>
       <div class="word-vi">${escHtml(w.vi)}</div>
       ${w.example ? `<div class="word-example">${escHtml(w.example)}</div>` : ''}
-      <div class="word-category-badge">${escHtml(CAT_LABELS[w.category] || w.category)}</div>
+      <div class="word-category-badge">${escHtml(getCatLabel(w.category))}</div>
       <div class="word-card-actions">
         <button class="action-btn" onclick="editWord(${w.id})" title="Chỉnh sửa">✏️</button>
         <button class="action-btn delete" onclick="openDeleteModal(${w.id})" title="Xóa">🗑️</button>
@@ -276,11 +438,11 @@ function renderFlashcard() {
   resetCardFlip();
 
   const word = fcDeck[fcIndex];
-  document.getElementById('fc-category').textContent     = CAT_LABELS[word.category] || word.category;
-  document.getElementById('fc-word').textContent         = word.en;
+  document.getElementById('fc-category').textContent      = getCatLabel(word.category);
+  document.getElementById('fc-word').textContent          = word.en;
   document.getElementById('fc-pronunciation').textContent = word.pronunciation || '';
-  document.getElementById('fc-meaning').textContent      = word.vi;
-  document.getElementById('fc-example').textContent      = word.example || '';
+  document.getElementById('fc-meaning').textContent       = word.vi;
+  document.getElementById('fc-example').textContent       = word.example || '';
 
   document.getElementById('fc-current').textContent = fcIndex + 1;
   document.getElementById('fc-total').textContent   = fcDeck.length;
@@ -319,8 +481,7 @@ function markCard(known) {
     fcIndex++;
     renderFlashcard();
   } else {
-    // End of deck
-    alert(`🎉 Hết bộ từ! Bạn đã đánh dấu đã nhớ ${vocab.filter(w=>w.known).length}/${vocab.length} từ.`);
+    alert(`🎉 Hết bộ từ! Bạn đã nhớ ${vocab.filter(w => w.known).length}/${vocab.length} từ.`);
   }
 }
 
@@ -357,11 +518,9 @@ function buildQuestions(type) {
     if (type === 'fill') {
       return { word, type: 'fill' };
     } else if (type === 'choose') {
-      // Show EN word, pick correct VI meaning
       const opts = shuffle([word, ...pickRandom(distractors, 3)]);
       return { word, type: 'choose', options: opts };
     } else {
-      // vi2en: Show VI meaning, pick correct EN word
       const opts = shuffle([word, ...pickRandom(distractors, 3)]);
       return { word, type: 'vi2en', options: opts };
     }
@@ -372,13 +531,12 @@ function renderQuestion() {
   const q = quizQuestions[quizIndex];
   if (!q) { showQuizResult(); return; }
 
-  document.getElementById('quiz-q-num').textContent = quizIndex + 1;
+  document.getElementById('quiz-q-num').textContent  = quizIndex + 1;
   document.getElementById('quiz-score').textContent  = quizScore;
 
   const pct = (quizIndex / quizQuestions.length) * 100;
   document.getElementById('quiz-score-bar').style.width = pct + '%';
 
-  // Reset UI
   const feedback = document.getElementById('quiz-feedback');
   feedback.classList.add('hidden');
   feedback.className = 'quiz-feedback hidden';
@@ -415,7 +573,7 @@ function renderQuestion() {
 function renderChoices(options, labelFn, correctId) {
   const container = document.getElementById('quiz-choices');
   container.innerHTML = options.map(opt => `
-    <button class="choice-btn" onclick="selectChoice(${opt.id}, ${correctId})">
+    <button class="choice-btn" data-id="${opt.id}" onclick="selectChoice(${opt.id}, ${correctId})">
       ${escHtml(labelFn(opt))}
     </button>
   `).join('');
@@ -428,16 +586,16 @@ function selectChoice(selectedId, correctId) {
   const btns = document.querySelectorAll('.choice-btn');
   btns.forEach(b => b.disabled = true);
 
-  const correct = selectedId === correctId;
-  if (correct) quizScore++;
+  const isCorrect = selectedId === correctId;
+  if (isCorrect) quizScore++;
 
   btns.forEach(b => {
-    const id = parseInt(b.getAttribute('onclick').split('(')[1]);
+    const id = parseInt(b.dataset.id);
     if (id === correctId) b.classList.add('correct');
-    else if (id === selectedId && !correct) b.classList.add('wrong');
+    else if (id === selectedId && !isCorrect) b.classList.add('wrong');
   });
 
-  showFeedback(correct, quizQuestions[quizIndex].word);
+  showFeedback(isCorrect, quizQuestions[quizIndex].word);
 }
 
 function submitFillAnswer() {
@@ -487,19 +645,17 @@ function showQuizResult() {
   const pct    = Math.round((quizScore / total) * 100);
 
   let emoji, title;
-  if (pct === 100) { emoji = '🏆'; title = 'Hoàn hảo!'; }
-  else if (pct >= 80) { emoji = '🎉'; title = 'Xuất sắc!'; }
-  else if (pct >= 60) { emoji = '👍'; title = 'Khá tốt!'; }
-  else if (pct >= 40) { emoji = '📚'; title = 'Cần ôn thêm!'; }
-  else { emoji = '💪'; title = 'Cố lên!'; }
+  if (pct === 100)       { emoji = '🏆'; title = 'Hoàn hảo!'; }
+  else if (pct >= 80)    { emoji = '🎉'; title = 'Xuất sắc!'; }
+  else if (pct >= 60)    { emoji = '👍'; title = 'Khá tốt!'; }
+  else if (pct >= 40)    { emoji = '📚'; title = 'Cần ôn thêm!'; }
+  else                   { emoji = '💪'; title = 'Cố lên!'; }
 
   document.getElementById('result-emoji').textContent      = emoji;
   document.getElementById('result-title').textContent      = title;
   document.getElementById('result-score-text').textContent = `${quizScore}/${total} (${pct}%)`;
   document.getElementById('result-detail').textContent     =
-    pct >= 80
-      ? 'Bạn đang học rất tốt! Hãy tiếp tục nhé 🌟'
-      : 'Hãy ôn lại flashcard rồi thử lại nhé!';
+    pct >= 80 ? 'Bạn đang học rất tốt! Hãy tiếp tục nhé 🌟' : 'Hãy ôn lại flashcard rồi thử lại nhé!';
 }
 
 function backToQuizStart() {
@@ -525,7 +681,7 @@ function shareVocab() {
       prompt('Sao chép link này để chia sẻ:', url);
     });
   } catch (e) {
-    alert('Không thể tạo link chia sẻ. Bộ từ của bạn có thể quá lớn.');
+    alert('Không thể tạo link chia sẻ. Bộ từ có thể quá lớn.');
   }
 }
 
@@ -545,7 +701,6 @@ function checkSharedURL() {
     if (Array.isArray(decoded) && decoded.length > 0) {
       sharedVocab = decoded;
       document.getElementById('shared-banner').classList.remove('hidden');
-      // Temporarily display shared vocab
       vocab = decoded;
       applyFilters();
       renderWordList();
@@ -558,11 +713,8 @@ function checkSharedURL() {
 
 function importSharedVocab() {
   if (!sharedVocab) return;
-  // Merge, avoid duplicates by english word
   let added = 0;
-  const existing = new Set(vocab.map(w => w.en.toLowerCase()));
 
-  // Load user's own vocab first
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const own = raw ? JSON.parse(raw) : [];
@@ -576,6 +728,7 @@ function importSharedVocab() {
     vocab = own;
     saveToStorage();
   } catch {
+    const existing = new Set(vocab.map(w => w.en.toLowerCase()));
     sharedVocab.forEach(w => {
       if (!existing.has(w.en.toLowerCase())) {
         vocab.push({ ...w, id: Date.now() + Math.random(), known: false });
@@ -587,8 +740,6 @@ function importSharedVocab() {
 
   sharedVocab = null;
   document.getElementById('shared-banner').classList.add('hidden');
-
-  // Remove share param from URL
   history.replaceState({}, '', location.pathname);
 
   applyFilters();
@@ -618,7 +769,6 @@ function pickRandom(arr, n) {
   return shuffle([...arr]).slice(0, Math.min(n, arr.length));
 }
 
-// Simple Levenshtein distance for typo tolerance in fill quiz
 function levenshtein(a, b) {
   const m = a.length, n = b.length;
   const dp = Array.from({length: m+1}, (_, i) =>

@@ -4,19 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>VocabMate – Học Tiếng Anh Cùng Nhau</title>
-  <meta name="description" content="Ứng dụng học tiếng Anh cá nhân hóa: thêm từ vựng, luyện flashcard, quiz và chia sẻ với bạn bè qua link." />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <meta name="description" content="Ứng dụng học tiếng Anh: thêm từ vựng, luyện flashcard, quiz và chia sẻ với bạn bè." />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Animated background -->
-  <div class="bg-orbs">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-  </div>
+  <!-- Subtle background -->
+  <div class="bg-pattern"></div>
 
   <!-- Header -->
   <header class="header">
@@ -27,8 +20,8 @@
       </div>
       <div class="header-actions">
         <button id="btn-share" class="btn btn-outline" onclick="shareVocab()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-          Chia sẻ bộ từ
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Chia sẻ
         </button>
         <div class="stats-badge">
           <span id="total-words">0</span> từ
@@ -37,7 +30,7 @@
     </div>
   </header>
 
-  <!-- Share notification -->
+  <!-- Share toast -->
   <div id="share-toast" class="toast hidden">
     <span>🔗 Đã sao chép link! Gửi cho bạn bè nhé.</span>
   </div>
@@ -46,68 +39,44 @@
   <div id="shared-banner" class="shared-banner hidden">
     <div class="shared-banner-inner">
       <span>👋 Bạn đang xem bộ từ được chia sẻ!</span>
-      <button class="btn btn-sm btn-primary" onclick="importSharedVocab()">Lưu vào bộ từ của tôi</button>
+      <button class="btn btn-primary btn-sm" onclick="importSharedVocab()">Lưu vào bộ từ của tôi</button>
     </div>
   </div>
 
   <main class="main">
-    <!-- Sidebar: Add word form -->
+    <!-- Sidebar -->
     <aside class="sidebar">
+      <!-- Add word form -->
       <div class="card form-card">
-        <h2 class="form-title">
-          <span id="form-title-text">✏️ Thêm từ mới</span>
-        </h2>
+        <h2 class="form-title" id="form-title-text">✏️ Thêm từ mới</h2>
         <form id="vocab-form" onsubmit="handleFormSubmit(event)">
           <div class="form-group">
             <label for="input-english">Tiếng Anh</label>
-            <input
-              id="input-english"
-              type="text"
-              placeholder="e.g. ephemeral"
-              autocomplete="off"
-              required
-            />
+            <input id="input-english" type="text" placeholder="e.g. ephemeral" autocomplete="off" required />
           </div>
           <div class="form-group">
             <label for="input-pronunciation">Phiên âm (tùy chọn)</label>
-            <input
-              id="input-pronunciation"
-              type="text"
-              placeholder="e.g. /ɪˈfem.ər.əl/"
-              autocomplete="off"
-            />
+            <input id="input-pronunciation" type="text" placeholder="e.g. /ɪˈfem.ər.əl/" autocomplete="off" />
           </div>
           <div class="form-group">
             <label for="input-vietnamese">Nghĩa tiếng Việt</label>
-            <textarea
-              id="input-vietnamese"
-              placeholder="e.g. phù du, ngắn ngủi"
-              rows="2"
-              required
-            ></textarea>
+            <textarea id="input-vietnamese" placeholder="e.g. phù du, ngắn ngủi" rows="2" required></textarea>
           </div>
           <div class="form-group">
             <label for="input-example">Ví dụ câu (tùy chọn)</label>
-            <textarea
-              id="input-example"
-              placeholder="e.g. Life is ephemeral."
-              rows="2"
-            ></textarea>
+            <textarea id="input-example" placeholder="e.g. Life is ephemeral." rows="2"></textarea>
           </div>
           <div class="form-group">
-            <label for="input-category">Chủ đề</label>
-            <select id="input-category">
-              <option value="general">Tổng hợp</option>
-              <option value="business">Kinh doanh</option>
-              <option value="travel">Du lịch</option>
-              <option value="academic">Học thuật</option>
-              <option value="daily">Hàng ngày</option>
-              <option value="technology">Công nghệ</option>
-            </select>
+            <label>Chủ đề</label>
+            <div class="category-row">
+              <select id="input-category"></select>
+              <button type="button" class="btn btn-outline btn-icon" onclick="openCategoryModal('add')" title="Thêm chủ đề">➕</button>
+              <button type="button" class="btn btn-outline btn-icon" onclick="openCategoryModal('manage')" title="Quản lý chủ đề">⚙️</button>
+            </div>
           </div>
           <div class="form-buttons">
             <button type="submit" class="btn btn-primary" id="btn-submit">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Thêm từ
             </button>
             <button type="button" class="btn btn-ghost" id="btn-cancel-edit" onclick="cancelEdit()" style="display:none">Hủy</button>
@@ -117,15 +86,11 @@
 
       <!-- Category filter -->
       <div class="card filter-card">
-        <h3 class="filter-title">🗂️ Lọc theo chủ đề</h3>
+        <div class="filter-title">
+          <span>🗂️ Lọc theo chủ đề</span>
+        </div>
         <div class="filter-chips" id="filter-chips">
-          <button class="chip active" data-cat="all" onclick="filterByCategory('all', this)">Tất cả</button>
-          <button class="chip" data-cat="general" onclick="filterByCategory('general', this)">Tổng hợp</button>
-          <button class="chip" data-cat="business" onclick="filterByCategory('business', this)">Kinh doanh</button>
-          <button class="chip" data-cat="travel" onclick="filterByCategory('travel', this)">Du lịch</button>
-          <button class="chip" data-cat="academic" onclick="filterByCategory('academic', this)">Học thuật</button>
-          <button class="chip" data-cat="daily" onclick="filterByCategory('daily', this)">Hàng ngày</button>
-          <button class="chip" data-cat="technology" onclick="filterByCategory('technology', this)">Công nghệ</button>
+          <!-- Rendered by JS -->
         </div>
       </div>
     </aside>
@@ -134,33 +99,21 @@
     <section class="content">
       <!-- Tabs -->
       <div class="tabs">
-        <button class="tab active" data-tab="list" onclick="switchTab('list', this)" id="tab-list">
-          📋 Danh sách từ
-        </button>
-        <button class="tab" data-tab="flashcard" onclick="switchTab('flashcard', this)" id="tab-flashcard">
-          🃏 Flashcard
-        </button>
-        <button class="tab" data-tab="quiz" onclick="switchTab('quiz', this)" id="tab-quiz">
-          🧠 Quiz
-        </button>
+        <button class="tab active" data-tab="list" onclick="switchTab('list', this)" id="tab-list">📋 Danh sách</button>
+        <button class="tab" data-tab="flashcard" onclick="switchTab('flashcard', this)" id="tab-flashcard">🃏 Flashcard</button>
+        <button class="tab" data-tab="quiz" onclick="switchTab('quiz', this)" id="tab-quiz">🧠 Quiz</button>
       </div>
 
       <!-- Tab: Word List -->
       <div id="panel-list" class="tab-panel active">
         <div class="list-header">
           <div class="search-box">
-            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input id="search-input" type="text" placeholder="Tìm từ vựng..." oninput="filterWords()" />
           </div>
-          <button class="btn btn-danger-outline btn-sm" onclick="clearAllWords()" id="btn-clear-all">
-            🗑️ Xóa tất cả
-          </button>
+          <button class="btn btn-danger-outline btn-sm" onclick="clearAllWords()" id="btn-clear-all">🗑️ Xóa tất cả</button>
         </div>
-
-        <div id="word-list" class="word-list">
-          <!-- Words rendered here -->
-        </div>
-
+        <div id="word-list" class="word-list"></div>
         <div id="empty-state" class="empty-state hidden">
           <div class="empty-icon">📖</div>
           <h3>Chưa có từ nào!</h3>
@@ -171,21 +124,17 @@
       <!-- Tab: Flashcard -->
       <div id="panel-flashcard" class="tab-panel hidden">
         <div class="flashcard-controls">
-          <div class="fc-progress">
-            <span id="fc-current">1</span> / <span id="fc-total">0</span>
-          </div>
+          <div class="fc-progress"><span id="fc-current">1</span> / <span id="fc-total">0</span></div>
           <div class="fc-buttons">
             <button class="btn btn-ghost btn-sm" onclick="shuffleFlashcards()">🔀 Xáo trộn</button>
             <button class="btn btn-ghost btn-sm" onclick="resetFlashcards()">↩️ Bắt đầu lại</button>
           </div>
         </div>
-
         <div id="fc-empty" class="empty-state hidden">
           <div class="empty-icon">🃏</div>
           <h3>Chưa có từ nào để luyện!</h3>
           <p>Hãy thêm ít nhất 1 từ vào danh sách.</p>
         </div>
-
         <div id="flashcard-area" class="flashcard-area">
           <div class="flashcard" id="flashcard" onclick="flipCard()">
             <div class="card-inner" id="card-inner">
@@ -203,23 +152,15 @@
             </div>
           </div>
         </div>
-
         <div class="fc-nav">
-          <button class="btn btn-outline" onclick="prevCard()" id="btn-prev">
-            ← Trước
-          </button>
+          <button class="btn btn-outline" onclick="prevCard()" id="btn-prev">← Trước</button>
           <div class="fc-know-buttons">
             <button class="btn btn-danger-outline" onclick="markCard(false)">😕 Chưa nhớ</button>
             <button class="btn btn-success" onclick="markCard(true)">✅ Đã nhớ</button>
           </div>
-          <button class="btn btn-outline" onclick="nextCard()" id="btn-next">
-            Tiếp →
-          </button>
+          <button class="btn btn-outline" onclick="nextCard()" id="btn-next">Tiếp →</button>
         </div>
-
-        <div class="fc-progress-bar-wrap">
-          <div class="fc-progress-bar" id="fc-progress-bar"></div>
-        </div>
+        <div class="fc-progress-bar-wrap"><div class="fc-progress-bar" id="fc-progress-bar"></div></div>
       </div>
 
       <!-- Tab: Quiz -->
@@ -229,75 +170,49 @@
           <h2>Kiểm tra từ vựng</h2>
           <p>Chọn loại câu hỏi và bắt đầu!</p>
           <div class="quiz-options">
-            <label class="quiz-option-label">
-              <input type="radio" name="quiz-type" value="fill" checked id="quiz-type-fill" />
-              ✏️ Điền từ tiếng Anh
-            </label>
-            <label class="quiz-option-label">
-              <input type="radio" name="quiz-type" value="choose" id="quiz-type-choose" />
-              🎯 Chọn nghĩa đúng
-            </label>
-            <label class="quiz-option-label">
-              <input type="radio" name="quiz-type" value="vi2en" id="quiz-type-vi2en" />
-              🔄 Dịch Việt → Anh
-            </label>
+            <label class="quiz-option-label"><input type="radio" name="quiz-type" value="fill" checked id="quiz-type-fill" /> ✏️ Điền từ tiếng Anh</label>
+            <label class="quiz-option-label"><input type="radio" name="quiz-type" value="choose" id="quiz-type-choose" /> 🎯 Chọn nghĩa đúng</label>
+            <label class="quiz-option-label"><input type="radio" name="quiz-type" value="vi2en" id="quiz-type-vi2en" /> 🔄 Dịch Việt → Anh</label>
           </div>
-          <button class="btn btn-primary btn-lg" onclick="startQuiz()" id="btn-start-quiz">
-            🚀 Bắt đầu Quiz
-          </button>
+          <button class="btn btn-primary btn-lg" onclick="startQuiz()" id="btn-start-quiz">🚀 Bắt đầu Quiz</button>
         </div>
-
         <div id="quiz-area" class="quiz-area hidden">
           <div class="quiz-header">
             <div class="quiz-score-row">
-              <span class="quiz-score-label">Điểm: <strong id="quiz-score">0</strong></span>
-              <span class="quiz-progress-text"><span id="quiz-q-num">1</span>/<span id="quiz-q-total">0</span></span>
+              <span>Điểm: <strong id="quiz-score">0</strong></span>
+              <span><span id="quiz-q-num">1</span>/<span id="quiz-q-total">0</span></span>
             </div>
-            <div class="quiz-score-bar-wrap">
-              <div class="quiz-score-bar" id="quiz-score-bar"></div>
-            </div>
+            <div class="quiz-score-bar-wrap"><div class="quiz-score-bar" id="quiz-score-bar"></div></div>
           </div>
-
           <div id="quiz-question-card" class="quiz-question-card">
             <div class="quiz-question-label" id="quiz-q-label"></div>
             <div class="quiz-question-text" id="quiz-q-text"></div>
-
-            <!-- Fill mode -->
             <div id="quiz-fill-area" class="quiz-fill-area hidden">
               <input id="quiz-fill-input" type="text" placeholder="Nhập câu trả lời..." class="quiz-fill-input" onkeydown="if(event.key==='Enter') submitFillAnswer()" autocomplete="off" />
               <button class="btn btn-primary" onclick="submitFillAnswer()" id="btn-submit-answer">Kiểm tra</button>
             </div>
-
-            <!-- Choose mode -->
             <div id="quiz-choices-area" class="quiz-choices-area hidden">
               <div class="quiz-choices" id="quiz-choices"></div>
             </div>
-
             <div id="quiz-feedback" class="quiz-feedback hidden"></div>
-
-            <button class="btn btn-outline" onclick="nextQuestion()" id="btn-next-question" style="display:none">
-              Câu tiếp theo →
-            </button>
+            <button class="btn btn-outline" onclick="nextQuestion()" id="btn-next-question" style="display:none">Câu tiếp theo →</button>
           </div>
         </div>
-
         <div id="quiz-result" class="quiz-result hidden">
           <div class="result-emoji" id="result-emoji"></div>
           <h2 id="result-title"></h2>
-          <div class="result-score">
-            <span id="result-score-text"></span>
-          </div>
+          <div class="result-score"><span id="result-score-text"></span></div>
           <div class="result-detail" id="result-detail"></div>
           <div class="result-buttons">
             <button class="btn btn-primary" onclick="startQuiz()">🔄 Làm lại</button>
-            <button class="btn btn-outline" onclick="backToQuizStart()">← Về màn hình chọn</button>
+            <button class="btn btn-outline" onclick="backToQuizStart()">← Quay lại</button>
           </div>
         </div>
       </div>
     </section>
   </main>
 
-  <!-- Delete confirm modal -->
+  <!-- Delete word modal -->
   <div id="delete-modal" class="modal-overlay hidden" onclick="closeDeleteModal(event)">
     <div class="modal">
       <div class="modal-icon">🗑️</div>
@@ -307,6 +222,13 @@
         <button class="btn btn-ghost" onclick="closeDeleteModal()">Hủy</button>
         <button class="btn btn-danger" onclick="confirmDelete()" id="btn-confirm-delete">Xóa</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Category modal (add / manage) -->
+  <div id="category-modal" class="modal-overlay hidden" onclick="closeCategoryModal(event)">
+    <div class="modal" id="category-modal-content">
+      <!-- Rendered by JS -->
     </div>
   </div>
 
