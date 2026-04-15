@@ -771,7 +771,8 @@ function exitQuiz() {
 }
 
 // ── Share Link ─────────────────────────────────────────────
-function shareVocab() {
+// ── Share Link ─────────────────────────────────────────────
+async function shareVocab() {
   if (vocab.length === 0) {
     alert('Bạn chưa có từ nào để chia sẻ!');
     return;
@@ -784,18 +785,38 @@ function shareVocab() {
     btn.innerHTML = '⌛ Đang tạo link...';
     btn.disabled = true;
 
-    // Nén dữ liệu trực tiếp vào link (giảm ~70% dung lượng)
+    // Chuẩn bị dữ liệu nén trước để làm dự phòng
     const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(vocab));
-    const url = `${location.origin}${location.pathname}?lz=${compressed}`;
+    const fallbackUrl = `${location.origin}${location.pathname}?lz=${compressed}`;
 
-    navigator.clipboard.writeText(url).then(() => {
-      showToast("✅ Đã sao chép link chia sẻ!");
-    }).catch(() => {
-      prompt('Sao chép link này để chia sẻ:', url);
-    });
+    try {
+      // Thử tạo link ID siêu ngắn (Ưu tiên)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 giây timeout
+
+      const response = await fetch('https://api.npoint.io/bins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vocab),
+        signal: controller.signal
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const shortUrl = `${location.origin}${location.pathname}?bin=${result.key}`;
+        await navigator.clipboard.writeText(shortUrl);
+        showToast("✅ Đã tạo link siêu ngắn!");
+      } else {
+        throw new Error();
+      }
+    } catch (err) {
+      // Nếu server lỗi, dùng link nén (Dự phòng)
+      await navigator.clipboard.writeText(fallbackUrl);
+      showToast("⚠️ Server bận - Đã dùng link nén dự phòng");
+    }
   } catch (e) {
     console.error(e);
-    alert('❌ Lỗi: Không thể tạo link. Hãy thử F5 trang web.');
+    alert('❌ Không thể copy link. Hãy thử lại.');
   } finally {
     btn.innerHTML = originalHtml;
     btn.disabled = false;
@@ -810,33 +831,38 @@ function showToast(message) {
   setTimeout(() => toast.classList.add('hidden'), 3500);
 }
 
-function checkSharedURL() {
+async function checkSharedURL() {
   const params = new URLSearchParams(location.search);
+  const binId  = params.get('bin');
   const lzData = params.get('lz');
   const oldShare = params.get('share');
 
-  let dataToProcess = null;
+  let importedData = null;
 
   try {
-    if (lzData) {
-      // Giải nén từ link kiểu mới
-      dataToProcess = JSON.parse(LZString.decompressFromEncodedURIComponent(lzData));
+    if (binId) {
+      showToast("🔍 Đang tải dữ liệu từ server...");
+      const res = await fetch(`https://api.npoint.io/bins/${binId}`);
+      if (res.ok) importedData = await res.json();
+    } else if (lzData) {
+      importedData = JSON.parse(LZString.decompressFromEncodedURIComponent(lzData));
     } else if (oldShare) {
-      // Tương thích với link kiểu cũ
-      dataToProcess = JSON.parse(decodeURIComponent(escape(atob(oldShare))));
+      importedData = JSON.parse(decodeURIComponent(escape(atob(oldShare))));
     }
-    
-    if (Array.isArray(dataToProcess) && dataToProcess.length > 0) {
-      sharedVocab = dataToProcess;
+
+    if (Array.isArray(importedData) && importedData.length > 0) {
+      sharedVocab = importedData;
       document.getElementById('shared-banner').classList.remove('hidden');
-      // Hiển thị dữ liệu lên giao diện để xem trước
-      vocab = dataToProcess;
+      // Tự động cuộn lên đầu để xem banner
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Cập nhật giao diện xem trước
+      vocab = importedData;
       applyFilters();
       renderWordList();
       updateStats();
     }
   } catch (e) {
-    console.warn('Link chia sẻ không hợp lệ hoặc bị hỏng.');
+    console.warn("Không thể tải bộ từ chia sẻ.");
   }
 }
 
