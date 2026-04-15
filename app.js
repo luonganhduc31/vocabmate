@@ -777,44 +777,66 @@ function shareVocab() {
     return;
   }
 
+  const btn = document.getElementById('btn-share');
+  const originalHtml = btn.innerHTML;
+  
   try {
-    const data    = JSON.stringify(vocab);
-    const encoded = btoa(unescape(encodeURIComponent(data)));
-    const url     = `${location.origin}${location.pathname}?share=${encoded}`;
+    btn.innerHTML = '⌛ Đang tạo link...';
+    btn.disabled = true;
+
+    // Nén dữ liệu trực tiếp vào link (giảm ~70% dung lượng)
+    const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(vocab));
+    const url = `${location.origin}${location.pathname}?lz=${compressed}`;
 
     navigator.clipboard.writeText(url).then(() => {
-      showToast();
+      showToast("✅ Đã sao chép link chia sẻ!");
     }).catch(() => {
       prompt('Sao chép link này để chia sẻ:', url);
     });
   } catch (e) {
-    alert('Không thể tạo link chia sẻ. Bộ từ có thể quá lớn.');
+    console.error(e);
+    alert('❌ Lỗi: Không thể tạo link. Hãy thử F5 trang web.');
+  } finally {
+    btn.innerHTML = originalHtml;
+    btn.disabled = false;
   }
 }
 
-function showToast() {
+function showToast(message) {
   const toast = document.getElementById('share-toast');
+  const span = toast.querySelector('span');
+  if (span) span.textContent = message;
   toast.classList.remove('hidden');
-  setTimeout(() => toast.classList.add('hidden'), 3000);
+  setTimeout(() => toast.classList.add('hidden'), 3500);
 }
 
 function checkSharedURL() {
   const params = new URLSearchParams(location.search);
-  const share  = params.get('share');
-  if (!share) return;
+  const lzData = params.get('lz');
+  const oldShare = params.get('share');
+
+  let dataToProcess = null;
 
   try {
-    const decoded = JSON.parse(decodeURIComponent(escape(atob(share))));
-    if (Array.isArray(decoded) && decoded.length > 0) {
-      sharedVocab = decoded;
+    if (lzData) {
+      // Giải nén từ link kiểu mới
+      dataToProcess = JSON.parse(LZString.decompressFromEncodedURIComponent(lzData));
+    } else if (oldShare) {
+      // Tương thích với link kiểu cũ
+      dataToProcess = JSON.parse(decodeURIComponent(escape(atob(oldShare))));
+    }
+    
+    if (Array.isArray(dataToProcess) && dataToProcess.length > 0) {
+      sharedVocab = dataToProcess;
       document.getElementById('shared-banner').classList.remove('hidden');
-      vocab = decoded;
+      // Hiển thị dữ liệu lên giao diện để xem trước
+      vocab = dataToProcess;
       applyFilters();
       renderWordList();
       updateStats();
     }
-  } catch {
-    console.warn('Invalid share link');
+  } catch (e) {
+    console.warn('Link chia sẻ không hợp lệ hoặc bị hỏng.');
   }
 }
 
