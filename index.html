@@ -133,18 +133,42 @@
 
       <!-- Tab: Flashcard -->
       <div id="panel-flashcard" class="tab-panel hidden">
+        <!-- Stats & Mastery Indicators -->
+        <div class="fc-stats-container">
+          <div class="fc-stats-main">
+            <div class="stat-item">🔥 <span id="fc-streak">0</span> ngày liên tiếp</div>
+            <div class="stat-item">🎯 <span id="fc-percent">0</span>% đã nhớ (<span id="fc-mastered-count">0</span> từ)</div>
+          </div>
+          <div class="fc-status-badges">
+            <div class="status-badge badge-new" onclick="showMasteryDetails('new')" title="Xem từ chưa học">
+              <span class="dot red"></span> Chưa học: <strong id="count-new">0</strong>
+            </div>
+            <div class="status-badge badge-learning" onclick="showMasteryDetails('learning')" title="Xem từ đang học">
+              <span class="dot yellow"></span> Đang học: <strong id="count-learning">0</strong>
+            </div>
+            <div class="status-badge badge-mastered" onclick="showMasteryDetails('mastered')" title="Xem từ đã nhớ">
+              <span class="dot green"></span> Đã nhớ: <strong id="count-mastered">0</strong>
+            </div>
+          </div>
+        </div>
+
         <div class="flashcard-controls">
-          <div class="fc-progress"><span id="fc-current">1</span> / <span id="fc-total">0</span></div>
+          <div class="fc-filter-group">
+            <label>Chủ đề:</label>
+            <select id="fc-category-select" onchange="initFlashcard()"></select>
+          </div>
           <div class="fc-buttons">
             <button class="btn btn-ghost btn-sm" onclick="shuffleFlashcards()">🔀 Xáo trộn</button>
             <button class="btn btn-ghost btn-sm" onclick="resetFlashcards()">↩️ Bắt đầu lại</button>
           </div>
         </div>
+
         <div id="fc-empty" class="empty-state hidden">
           <div class="empty-icon">🃏</div>
           <h3>Chưa có từ nào để luyện!</h3>
-          <p>Hãy thêm ít nhất 1 từ vào danh sách.</p>
+          <p>Hãy thêm từ hoặc chọn chủ đề khác.</p>
         </div>
+
         <div id="flashcard-area" class="flashcard-area">
           <div class="flashcard" id="flashcard" onclick="flipCard()">
             <div class="card-inner" id="card-inner">
@@ -162,15 +186,38 @@
             </div>
           </div>
         </div>
+
         <div class="fc-nav">
-          <button class="btn btn-outline" onclick="prevCard()" id="btn-prev">← Trước</button>
-          <div class="fc-know-buttons">
-            <button class="btn btn-danger-outline" onclick="markCard(false)">😕 Chưa nhớ</button>
-            <button class="btn btn-success" onclick="markCard(true)">✅ Đã nhớ</button>
+          <div class="fc-progress-info">Câu <span id="fc-current">1</span> / <span id="fc-total">0</span></div>
+          <div class="fc-rating-buttons">
+            <button class="btn btn-danger rating-btn" onclick="rateCard('hard')">
+              <span class="btn-icon">❌</span>
+              <span class="btn-text">Quên (Hard)</span>
+            </button>
+            <button class="btn btn-warning rating-btn" onclick="rateCard('medium')">
+              <span class="btn-icon">🤔</span>
+              <span class="btn-text">Lưỡng lự (Medium)</span>
+            </button>
+            <button class="btn btn-success rating-btn" onclick="rateCard('easy')">
+              <span class="btn-icon">✅</span>
+              <span class="btn-text">Nhớ rõ (Easy)</span>
+            </button>
           </div>
-          <button class="btn btn-outline" onclick="nextCard()" id="btn-next">Tiếp →</button>
         </div>
-        <div class="fc-progress-bar-wrap"><div class="fc-progress-bar" id="fc-progress-bar"></div></div>
+        <div class="fc-progress-bar-wrap">
+          <div class="fc-progress-bar" id="fc-progress-bar"></div>
+        </div>
+      </div>
+
+      <!-- Mastery details modal -->
+      <div id="mastery-modal" class="modal-overlay hidden" onclick="closeMasteryModal(event)">
+        <div class="modal" style="max-width: 600px; width: 95%;">
+          <h3 id="mastery-modal-title">Danh sách từ</h3>
+          <div id="mastery-modal-list" style="text-align: left; margin: 16px 0; max-height: 400px; overflow-y: auto; padding-right: 8px;"></div>
+          <div class="modal-buttons">
+            <button class="btn btn-primary" onclick="closeMasteryModal()">Đóng</button>
+          </div>
+        </div>
       </div>
 
       <!-- Tab: Quiz -->
@@ -257,13 +304,14 @@
       <p>Mẹo: Copy bảng từ Word/Excel rồi dán vào ô dưới đây. Các cột sẽ tự động nhận diện.</p>
       
       <div class="form-group" style="text-align: left; margin-top: 16px;">
-        <label>1. Chọn chủ đề cho các từ này:</label>
+        <label>1. Chủ đề mặc định (nếu hàng không có chủ đề):</label>
         <select id="import-category-select"></select>
       </div>
 
       <div class="form-group" style="text-align: left;">
         <label>2. Dán nội dung bảng vào đây:</label>
-        <textarea id="import-textarea" rows="10" placeholder="English	Pronunciation	Vietnamese	Example (Ngăn cách bởi phím Tab khi copy từ bảng)" style="width: 100%; white-space: pre; overflow-x: auto;"></textarea>
+        <textarea id="import-textarea" rows="10" placeholder="Tiếng Anh	Phiên âm	Nghĩa tiếng Việt	Ví dụ	Chủ đề
+(Copy từ Excel: 5 cột tương ứng)" style="width: 100%; white-space: pre; overflow-x: auto;"></textarea>
       </div>
 
       <div id="import-stats" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;"></div>

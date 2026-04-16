@@ -27,6 +27,7 @@ let categories = [];
 // Flashcard
 let fcDeck  = [];
 let fcIndex = 0;
+let needsFinalReview = new Set(); // IDs of words that need review at the end
 
 // Quiz
 let quizQuestions = [];
@@ -41,19 +42,61 @@ let deleteTargetId = null;
 // Shared vocab
 let sharedVocab = null;
 
+// Streak state
+let streak = 0;
+let lastDate = null; // last date user practiced flashcards
+
 const STORAGE_KEY     = 'vocabmate_words';
 const CATEGORIES_KEY  = 'vocabmate_categories';
+const STREAK_KEY      = 'vocabmate_streak';
+const LAST_DATE_KEY   = 'vocabmate_last_date';
 
 // ── Init ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   loadCategories();
   loadFromStorage();
+  loadStreak();
   checkSharedURL();
   renderCategorySelect();
   renderFilterChips();
   renderWordList();
   updateStats();
+  updateFlashcardStats();
 });
+
+function loadStreak() {
+  streak = parseInt(localStorage.getItem(STREAK_KEY)) || 0;
+  lastDate = localStorage.getItem(LAST_DATE_KEY);
+  
+  const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+  if (lastDate) {
+    const last = new Date(lastDate);
+    const curr = new Date(today);
+    const diff = (curr - last) / (1000 * 60 * 60 * 24);
+    
+    if (diff > 1) {
+      streak = 0; // Lost streak
+    }
+  }
+}
+
+function updateStreak() {
+  const today = new Date().toLocaleDateString('en-CA');
+  if (lastDate !== today) {
+    if (lastDate) {
+      const last = new Date(lastDate);
+      const curr = new Date(today);
+      const diff = (curr - last) / (1000 * 60 * 60 * 24);
+      if (diff === 1) streak++;
+      else if (diff > 1) streak = 1;
+    } else {
+      streak = 1;
+    }
+    lastDate = today;
+    localStorage.setItem(STREAK_KEY, streak);
+    localStorage.setItem(LAST_DATE_KEY, lastDate);
+  }
+}
 
 // ── Categories CRUD ────────────────────────────────────────
 function loadCategories() {
@@ -79,7 +122,8 @@ function getCatLabel(catId) {
 function renderCategorySelect() {
   const selects = [
     document.getElementById('input-category'),
-    document.getElementById('import-category-select')
+    document.getElementById('import-category-select'),
+    document.getElementById('fc-category-select')
   ];
   
   const optionsHtml = categories.map(c =>
@@ -87,7 +131,15 @@ function renderCategorySelect() {
   ).join('');
 
   selects.forEach(s => {
-    if (s) s.innerHTML = optionsHtml;
+    if (s) {
+      const currentVal = s.value;
+      if (s.id === 'fc-category-select') {
+        s.innerHTML = `<option value="all">Tất cả chủ đề</option>` + optionsHtml;
+      } else {
+        s.innerHTML = optionsHtml;
+      }
+      if (currentVal) s.value = currentVal;
+    }
   });
 
   const quizSelect = document.getElementById('quiz-category-select');
@@ -114,7 +166,23 @@ function addCategory(name) {
   renderCategorySelect();
   renderFilterChips();
   // Select the new category in the form
-  document.getElementById('input-category').value = id;
+  if (document.getElementById('input-category')) {
+    document.getElementById('input-category').value = id;
+  }
+  return id;
+}
+
+/**
+ * Finds category ID by name (case-insensitive) or creates a new one.
+ */
+function findOrCreateCategory(name) {
+  name = name.trim();
+  if (!name) return null;
+  
+  const existing = categories.find(c => c.name.toLowerCase() === name.toLowerCase());
+  if (existing) return existing.id;
+  
+  return addCategory(name);
 }
 
 function renameCategory(catId, newName) {
@@ -242,7 +310,7 @@ function closeImportModal(e) {
 
 function processBulkImport() {
   const text = document.getElementById('import-textarea').value.trim();
-  const catId = document.getElementById('import-category-select').value;
+  const defaultCatId = document.getElementById('import-category-select').value;
   
   if (!text) {
     alert('Vui lòng dán nội dung vào ô nhập liệu!');
@@ -251,33 +319,55 @@ function processBulkImport() {
 
   const lines = text.split('\n');
   let count = 0;
-  
-  // To avoid ID collisions during rapid batch add
   let baseId = Date.now();
+  let duplicatesFound = [];
 
   lines.forEach((line, index) => {
     if (!line.trim()) return;
 
-    // Split logic: Tab is standard for Word/Excel. 
-    // Fallback split by 2+ spaces or semicolons
+    // Excel/Word tables use Tabs. Split by Tab.
     let parts = line.split('\t');
+    
+    // If only 1 part, user might have used multiple spaces or semicolons
     if (parts.length < 2) parts = line.split(/ {2,}/);
     if (parts.length < 2) parts = line.split(';');
 
     if (parts.length >= 2) {
-      const en = parts[0]?.trim();
-      const ipa = parts[1]?.trim();
-      const vi = parts[2]?.trim() || '';
-      const ex = parts[3]?.trim() || '';
+      const en      = parts[0]?.trim();
+      const ipa     = parts[1]?.trim();
+      const vi      = parts[2]?.trim();
+      const ex      = parts[3]?.trim();
+      const catName = parts[4]?.trim();
+
+      // Skip header row if matches common terms
+      const lowEn = en.toLowerCase();
+      if (lowEn === 'tiếng anh' || lowEn === 'english' || lowEn === 'từ vựng') return;
 
       if (en) {
+        let finalCatId = defaultCatId;
+        
+        // If a topic is provided in the 5th column, find or create it
+        if (catName) {
+          finalCatId = findOrCreateCategory(catName) || defaultCatId;
+        }
+
+        // Check for duplicate in existing vocab (Same word AND Same category)
+        const existing = vocab.find(w => 
+          w.en.toLowerCase() === en.toLowerCase() && 
+          w.category === finalCatId
+        );
+        if (existing) {
+          duplicatesFound.push(`- ${en} (Đã có trong chủ đề: ${getCatLabel(existing.category)})`);
+          return; // Skip adding this word
+        }
+
         vocab.unshift({
           id: baseId + index + Math.random(),
           en: en,
-          pronunciation: ipa,
-          vi: vi || en, // Fallback to EN if VI missing
-          example: ex,
-          category: catId,
+          pronunciation: ipa || '',
+          vi: vi || en, // Fallback if VI is missing
+          example: ex || '',
+          category: finalCatId,
           known: false
         });
         count++;
@@ -290,10 +380,15 @@ function processBulkImport() {
     applyFilters();
     renderWordList();
     updateStats();
-    alert(`✅ Thành công! Đã nhập ${count} từ vựng vào hệ thống.`);
+    
+    let msg = `✅ Đã nhập thành công ${count} từ vựng mới.`;
+    if (duplicatesFound.length > 0) {
+      msg += `\n\n⚠️ Đã bỏ qua ${duplicatesFound.length} từ bị trùng sau đây:\n${duplicatesFound.slice(0, 15).join('\n')}${duplicatesFound.length > 15 ? '\n...và các từ khác' : ''}`;
+    }
+    alert(msg);
     closeImportModal();
   } else {
-    alert('❌ Không tìm thấy dữ liệu hợp lệ. Lưu ý: Cần có ít nhất cột Từ vựng và Phiên âm/Nghĩa.');
+    alert('❌ Không tìm thấy dữ liệu hợp lệ.\nLưu ý: Bạn cần có ít nhất cột Tiếng Anh và Nghĩa/Phiên âm.');
   }
 }
 
@@ -319,6 +414,17 @@ function handleFormSubmit(e) {
   const category      = document.getElementById('input-category').value;
 
   if (!en || !vi) return;
+
+  // Check for duplicates (Same word AND Same category)
+  const existing = vocab.find(w => 
+    w.en.toLowerCase() === en.toLowerCase() && 
+    w.category === category &&
+    w.id !== editingId
+  );
+  if (existing) {
+    alert(`Từ "${en}" đã tồn tại trong chủ đề "${getCatLabel(existing.category)}". Hệ thống sẽ không thêm từ trùng lặp trong cùng một chủ đề.`);
+    return;
+  }
 
   if (editingId !== null) {
     const idx = vocab.findIndex(w => w.id === editingId);
@@ -488,16 +594,18 @@ function goToHome() {
 
 // ── Flashcard ──────────────────────────────────────────────
 function initFlashcard() {
-  fcDeck  = shuffle([...vocab]);
+  const filterId = document.getElementById('fc-category-select')?.value || 'all';
+  let pool = filterId === 'all' ? [...vocab] : vocab.filter(w => w.category === filterId);
+  
+  fcDeck  = shuffle([...pool]);
   fcIndex = 0;
+  needsFinalReview = new Set(); // Reset final review pool
   renderFlashcard();
+  updateFlashcardStats();
 }
 
 function shuffleFlashcards() {
-  fcDeck = shuffle([...vocab]);
-  fcIndex = 0;
-  resetCardFlip();
-  renderFlashcard();
+  initFlashcard(); // Also shuffles
 }
 
 function resetFlashcards() {
@@ -515,7 +623,6 @@ function renderFlashcard() {
     empty.classList.remove('hidden');
     document.querySelector('.fc-nav').style.display = 'none';
     document.querySelector('.fc-progress-bar-wrap').style.display = 'none';
-    document.querySelector('.flashcard-controls').style.display = 'none';
     return;
   }
 
@@ -560,19 +667,131 @@ function nextCard() {
   if (fcIndex < fcDeck.length - 1) { fcIndex++; renderFlashcard(); }
 }
 
-function markCard(known) {
+function rateCard(rating) {
   const word = fcDeck[fcIndex];
-  const idx  = vocab.findIndex(w => w.id === word.id);
-  if (idx !== -1) {
-    vocab[idx].known = known;
-    saveToStorage();
+  const vocabIdx = vocab.findIndex(w => w.id === word.id);
+  if (vocabIdx === -1) return;
+
+  updateStreak();
+
+  if (rating === 'hard') {
+    // ❌ Quên: lặp lại sau 2 câu + lặp ở cuối
+    vocab[vocabIdx].mastery = 1;
+    needsFinalReview.add(word.id);
+    const reInsertIdx = Math.min(fcIndex + 2, fcDeck.length);
+    fcDeck.splice(reInsertIdx, 0, word);
+  } else if (rating === 'medium') {
+    // 🤔 Lưỡng lự: lặp lại sau 7 câu + lặp ở cuối
+    vocab[vocabIdx].mastery = 1;
+    needsFinalReview.add(word.id);
+    const reInsertIdx = Math.min(fcIndex + 7, fcDeck.length);
+    fcDeck.splice(reInsertIdx, 0, word);
+  } else {
+    // ✅ Nhớ rõ: Xong luôn, không lặp lại
+    vocab[vocabIdx].mastery = 2;
+    vocab[vocabIdx].known = true;
+    // Don't add to needsFinalReview, word will naturally disappear from deck flow
   }
+
+  saveToStorage();
+  updateFlashcardStats();
+
   if (fcIndex < fcDeck.length - 1) {
     fcIndex++;
     renderFlashcard();
   } else {
-    alert(`🎉 Hết bộ từ! Bạn đã nhớ ${vocab.filter(w => w.known).length}/${vocab.length} từ.`);
+    // Check for final review phase
+    if (needsFinalReview.size > 0) {
+      const reviewWords = vocab.filter(w => needsFinalReview.has(w.id));
+      fcDeck = [...fcDeck, ...shuffle(reviewWords)];
+      needsFinalReview.clear(); // Clear so we don't loop forever
+      fcIndex++;
+      alert("🎯 Bắt đầu vòng ôn tập cuối cho các từ chưa thuộc!");
+      renderFlashcard();
+    } else {
+      alert(`🎉 Chúc mừng! Bạn đã hoàn thành bộ từ này.`);
+      initFlashcard();
+    }
   }
+}
+
+function updateFlashcardStats() {
+  const filterId = document.getElementById('fc-category-select')?.value || 'all';
+  const pool = filterId === 'all' ? vocab : vocab.filter(w => w.category === filterId);
+  const total = pool.length;
+  
+  if (total === 0) {
+    document.getElementById('fc-streak').textContent = streak;
+    document.getElementById('fc-percent').textContent = '0';
+    document.getElementById('count-new').textContent = '0';
+    document.getElementById('count-learning').textContent = '0';
+    document.getElementById('count-mastered').textContent = '0';
+    return;
+  }
+
+  const masteryCounts = { new: 0, learning: 0, mastered: 0 };
+  pool.forEach(w => {
+    if (!w.mastery) masteryCounts.new++;
+    else if (w.mastery === 1) masteryCounts.learning++;
+    else if (w.mastery === 2) masteryCounts.mastered++;
+  });
+
+  const masteredCount = masteryCounts.mastered;
+  const pct = Math.round((masteredCount / total) * 100);
+
+  document.getElementById('fc-streak').textContent = streak;
+  document.getElementById('fc-percent').textContent = pct;
+  document.getElementById('fc-mastered-count').textContent = masteredCount;
+
+  document.getElementById('count-new').textContent = masteryCounts.new;
+  document.getElementById('count-learning').textContent = masteryCounts.learning;
+  document.getElementById('count-mastered').textContent = masteryCounts.mastered;
+}
+
+function showMasteryDetails(status) {
+  const filterId = document.getElementById('fc-category-select')?.value || 'all';
+  const pool = filterId === 'all' ? vocab : vocab.filter(w => w.category === filterId);
+  
+  const modal = document.getElementById('mastery-modal');
+  const title = document.getElementById('mastery-modal-title');
+  const listCont = document.getElementById('mastery-modal-list');
+
+  let filtered = [];
+  let label = "";
+  if (status === 'new') {
+    filtered = pool.filter(w => !w.mastery);
+    label = "🔴 Chưa học";
+  } else if (status === 'learning') {
+    filtered = pool.filter(w => w.mastery === 1);
+    label = "🟡 Đang học";
+  } else {
+    filtered = pool.filter(w => w.mastery === 2);
+    label = "🟢 Đã nhớ";
+  }
+
+  const catName = filterId === 'all' ? 'Tất cả chủ đề' : getCatLabel(filterId);
+  title.textContent = `${label} - ${catName} (${filtered.length})`;
+
+  if (filtered.length === 0) {
+    listCont.innerHTML = '<p style="text-align:center; color: var(--text-muted); padding: 20px;">Không có từ nào ở mục này.</p>';
+  } else {
+    listCont.innerHTML = filtered.map(w => `
+      <div style="padding: 10px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <strong style="color: var(--accent-1); font-size: 15px;">${escHtml(w.en)}</strong>
+          <div style="font-size: 13px; color: var(--text-secondary);">${escHtml(w.vi)}</div>
+        </div>
+        <span class="word-category-badge" style="margin:0;">${escHtml(getCatLabel(w.category))}</span>
+      </div>
+    `).join('');
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeMasteryModal(e) {
+  if (e && e.target !== document.getElementById('mastery-modal')) return;
+  document.getElementById('mastery-modal').classList.add('hidden');
 }
 
 // ── Quiz ───────────────────────────────────────────────────

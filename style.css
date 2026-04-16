@@ -193,6 +193,24 @@ body {
   gap: 16px;
   position: sticky;
   top: 84px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding-right: 8px; /* Space for scrollbar */
+}
+
+/* Custom scrollbar for sidebar */
+.sidebar::-webkit-scrollbar {
+  width: 5px;
+}
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-accent);
+  border-radius: 10px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-1);
 }
 
 .form-title {
@@ -637,6 +655,85 @@ body {
 .empty-state p { color: var(--text-secondary); font-size: 14px; }
 
 /* ---- Flashcard Tab ---- */
+/* ---- Flashcard Tab Overhaul ---- */
+.fc-stats-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+  background: var(--bg-card);
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+.fc-stats-main {
+  display: flex;
+  justify-content: space-around;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.stat-item {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.fc-status-badges {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  border: 1px solid transparent;
+}
+.status-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+  border-color: var(--border-accent);
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.dot.red { background: var(--danger); box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
+.dot.yellow { background: var(--warning); box-shadow: 0 0 8px rgba(249, 115, 22, 0.4); }
+.dot.green { background: var(--success); box-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
+
+.fc-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.fc-filter-group label {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.fc-filter-group select {
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  background: var(--bg-input);
+}
+
+/* ---- Flashcard Control Layout ---- */
 .flashcard-controls {
   display: flex;
   align-items: center;
@@ -645,15 +742,9 @@ body {
   flex-wrap: wrap;
   gap: 12px;
 }
-
-.fc-progress {
-  font-size: 14px;
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
 .fc-buttons { display: flex; gap: 8px; }
 
+/* ---- Flashcard Core Card Styles (RESTORING) ---- */
 .flashcard-area {
   display: flex;
   justify-content: center;
@@ -765,27 +856,74 @@ body {
 
 .fc-nav {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 14px;
-  flex-wrap: wrap;
+  gap: 20px;
 }
 
-.fc-know-buttons { display: flex; gap: 10px; }
+.fc-progress-info {
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.fc-rating-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.rating-btn {
+  flex-direction: column;
+  padding: 12px 20px;
+  min-width: 120px;
+  height: auto;
+  gap: 4px;
+  border-radius: var(--radius-lg);
+}
+
+.rating-btn .btn-icon {
+  font-size: 20px;
+}
+.rating-btn .btn-text {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
 
 .fc-progress-bar-wrap {
-  height: 5px;
+  height: 8px;
   background: var(--border);
   border-radius: 999px;
-  margin-top: 24px;
-  overflow: hidden;
+  margin-top: 30px;
+  overflow: visible; /* Allow fire icon to pop out */
+  position: relative;
 }
+
 .fc-progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  background: linear-gradient(90deg, #ff4d4d, #f97316, #fbbf24);
   border-radius: 999px;
-  transition: width 0.5s ease;
+  transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
   width: 0%;
+  position: relative;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.3);
+}
+
+/* Fire icon that follows the progress */
+.fc-progress-bar::after {
+  content: '🔥';
+  position: absolute;
+  right: -10px;
+  top: -12px;
+  font-size: 20px;
+  animation: firePulse 0.8s infinite alternate;
+}
+
+@keyframes firePulse {
+  from { transform: scale(1) translateY(0); filter: drop-shadow(0 0 2px orange); }
+  to { transform: scale(1.2) translateY(-2px); filter: drop-shadow(0 0 8px red); }
 }
 
 /* ---- Quiz Tab ---- */
