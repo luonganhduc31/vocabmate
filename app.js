@@ -160,6 +160,17 @@ function renderFilterChips() {
 function addCategory(name) {
   name = name.trim();
   if (!name) return;
+
+  // Check if category already exists (duplicate check)
+  const existing = categories.find(c => c.name.toLowerCase() === name.toLowerCase());
+  if (existing) {
+    // If it exists, just select it and return
+    if (document.getElementById('input-category')) {
+      document.getElementById('input-category').value = existing.id;
+    }
+    return existing.id;
+  }
+
   const id = 'cat_' + Date.now();
   categories.push({ id, name });
   saveCategories();
@@ -249,12 +260,13 @@ function openCategoryModal(mode) {
     content.innerHTML = `
       <div class="modal-icon">⚙️</div>
       <h3>Quản lý chủ đề</h3>
-      <div style="text-align:left;margin-bottom:16px;max-height:300px;overflow-y:auto;">
+      <div style="text-align:left;margin-bottom:16px;max-height:300px;overflow-y:auto; border: 1px solid #edf2f7; border-radius: 8px; padding: 0 12px;">
         ${listHtml}
       </div>
-      <div class="modal-buttons">
+      <div class="modal-buttons" style="flex-wrap: wrap;">
         <button class="btn btn-ghost" onclick="closeCategoryModal()">Đóng</button>
         <button class="btn btn-primary" onclick="closeCategoryModal();openCategoryModal('add')">➕ Thêm mới</button>
+        <button class="btn btn-danger-outline" onclick="clearAllCategories()" style="width: 100%; justify-content: center; margin-top: 8px;">🗑️ Xóa tất cả chủ đề</button>
       </div>
     `;
   }
@@ -291,6 +303,31 @@ function promptDeleteCategory(catId, catName) {
     deleteCategory(catId);
     closeCategoryModal();
     openCategoryModal('manage'); // refresh
+  }
+}
+
+function clearAllCategories() {
+  const customCats = categories.filter(c => c.id !== 'general');
+  if (customCats.length === 0) {
+    alert('Không có chủ đề tùy chỉnh nào để xóa!');
+    return;
+  }
+
+  if (confirm(`Bạn có chắc muốn xóa TẤT CẢ ${customCats.length} chủ đề tùy chỉnh? \n(Các từ vựng sẽ được chuyển về "Tổng hợp")`)) {
+    // Move all words to general
+    vocab.forEach(w => w.category = 'general');
+    saveToStorage();
+
+    // Reset to default
+    categories = [{ id: 'general', name: 'Tổng hợp' }];
+    saveCategories();
+    
+    currentCategory = 'all';
+    renderCategorySelect();
+    renderFilterChips();
+    renderWordList();
+    closeCategoryModal();
+    alert('Đã xóa tất cả chủ đề tùy chỉnh.');
   }
 }
 
@@ -833,16 +870,51 @@ function startQuiz() {
 function buildQuestions(type, pool) {
   pool = pool || shuffle([...vocab]).slice(0, Math.min(vocab.length, 15));
   const qs = shuffle([...pool]);
+  
   return qs.map(word => {
-    const distractors = vocab.filter(w => w.id !== word.id);
+    // Basic distractors candidate pool (excluding the correct answer)
+    const candidates = vocab.filter(w => w.id !== word.id);
+    
     if (type === 'fill') {
       return { word, type: 'fill' };
-    } else if (type === 'choose') {
-      const opts = shuffle([word, ...pickRandom(distractors, 3)]);
+    } 
+    
+    if (type === 'choose') {
+      // Standard random distractors for "English -> VI"
+      const opts = shuffle([word, ...pickRandom(candidates, 3)]);
       return { word, type: 'choose', options: opts };
+    } 
+    
+    // type === 'vi2en' (Vietnamese -> English)
+    // 50% chance of getting "Hard" (Distracting) options
+    const isHard = Math.random() > 0.5;
+    
+    if (isHard && candidates.length >= 3) {
+      // Logic for Hard Distractors:
+      // Priority 1: Same category
+      const sameCat = candidates.filter(w => w.category === word.category);
+      // Priority 2: Same prefix (first 2 letters)
+      const samePrefix = candidates.filter(w => w.en.substring(0, 2).toLowerCase() === word.en.substring(0, 2).toLowerCase());
+      // Priority 3: Similar length (+/- 2 letters)
+      const similarLen = candidates.filter(w => Math.abs(w.en.length - word.en.length) <= 2);
+      
+      // Combine and filter unique distractors
+      const smartPool = [...new Set([...sameCat, ...samePrefix, ...similarLen])];
+      
+      let hardDistractors = [];
+      if (smartPool.length >= 3) {
+        hardDistractors = pickRandom(smartPool, 3);
+      } else {
+        // Not enough smart options, mix smart + random
+        hardDistractors = [...smartPool, ...pickRandom(candidates.filter(c => !smartPool.includes(c)), 3 - smartPool.length)];
+      }
+      
+      const opts = shuffle([word, ...hardDistractors]);
+      return { word, type: 'vi2en', options: opts, difficulty: 'hard' };
     } else {
-      const opts = shuffle([word, ...pickRandom(distractors, 3)]);
-      return { word, type: 'vi2en', options: opts };
+      // Standard random distractors
+      const opts = shuffle([word, ...pickRandom(candidates, 3)]);
+      return { word, type: 'vi2en', options: opts, difficulty: 'standard' };
     }
   });
 }
