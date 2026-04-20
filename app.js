@@ -42,6 +42,15 @@ let deleteTargetId = null;
 // Shared vocab
 let sharedVocab = null;
 
+// Celebrities for Quiz Lifelines
+const CELEBRITIES = [
+  { name: 'Jack - 5 Củ', img: 'meme/jack.png', msg: 'Anh không "xòe" nữa, gợi ý cho em cực căng này, ngọt ngào như lời hứa 5 triệu luôn!' },
+  { name: 'Độ Mixi (Tộc Trưởng)', img: 'meme/domixi.png', msg: 'Đáp án này mà sai thì tôi "off stream" luôn cho các ông xem! Tộc trưởng không bao giờ nói phét.' },
+  { name: 'Trấn Thành (Cry)', img: 'meme/tranthanh.png', msg: 'Thành CRY đã ở đây để giúp bạn vượt qua nỗi đau mất điểm! Nước mắt rơi vì đáp án quá chuẩn...' },
+  { name: 'Bô Lão Dũng CT', img: 'meme/dungct.png', msg: 'Phê chưa? Đáp án này mới gọi là "best" này các bạn! Cùng quẩy linh hồn của bô lão nào.' },
+  { name: 'Sơn Tùng MTP (Sky)', img: 'meme/sontung.png', msg: 'Nắng ấm đã về, và đáp án chính là đây! Hãy tỏa sáng rực rỡ như một Sky chân chính nhé.' }
+];
+
 // Streak state
 let streak = 0;
 let lastDate = null; // last date user practiced flashcards
@@ -591,8 +600,13 @@ function renderWordList() {
   container.innerHTML = filteredList.map(w => `
     <div class="word-card" id="wc-${w.id}">
       <div class="word-card-header">
-        <div>
-          <div class="word-en">${escHtml(w.en)}</div>
+        <div style="flex: 1;">
+          <div class="word-en-row">
+            <div class="word-en">${escHtml(w.en)}</div>
+            <button class="speaker-btn" onclick="event.stopPropagation(); playSpeech('${escHtml(w.en.replace(/'/g, "\\'"))}')" title="Phát âm">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+            </button>
+          </div>
           ${w.pronunciation ? `<div class="word-pronunciation">${escHtml(w.pronunciation)}</div>` : ''}
         </div>
         ${w.known ? '<span title="Đã nhớ" style="font-size:16px;">✅</span>' : ''}
@@ -610,6 +624,62 @@ function renderWordList() {
 
 function updateStats() {
   document.getElementById('total-words').textContent = vocab.length;
+}
+
+// ── Speech & Sounds ──────────────────────────────────────────
+let voices = [];
+// More reliable, stable URLs
+const correctSound = new Audio('https://raw.githubusercontent.com/ProgrammingHero1/simple-quiz-app/master/correct.mp3');
+const wrongSound   = new Audio('https://raw.githubusercontent.com/ProgrammingHero1/simple-quiz-app/master/wrong.mp3');
+
+function loadVoices() {
+  voices = window.speechSynthesis.getVoices();
+}
+if (window.speechSynthesis) {
+  loadVoices();
+  if (speechSynthesis.onvoiceschanged !== undefined) {
+    speechSynthesis.onvoiceschanged = loadVoices;
+  }
+}
+
+function playSpeech(text) {
+  if (!window.speechSynthesis) {
+    console.error('Speech synthesis not supported');
+    return;
+  }
+  
+  // Cancel any ongoing speech
+  window.speechSynthesis.cancel();
+  
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'en-US';
+  utterance.rate = 0.95; 
+  utterance.pitch = 1;
+  
+  if (voices.length === 0) loadVoices();
+  
+  const preferredVoice = voices.find(v => v.lang === 'en-US' && v.name.includes('Google')) || 
+                         voices.find(v => v.lang === 'en-US' && v.name.includes('Apple')) ||
+                         voices.find(v => v.lang === 'en-US' && v.name.includes('Samantha')) ||
+                         voices.find(v => v.lang.startsWith('en-US')) ||
+                         voices.find(v => v.lang.startsWith('en'));
+  
+  if (preferredVoice) utterance.voice = preferredVoice;
+  
+  window.speechSynthesis.speak(utterance);
+}
+
+function playQuizSound(isCorrect) {
+  const sound = isCorrect ? correctSound : wrongSound;
+  sound.currentTime = 0;
+  sound.volume = 0.6;
+  const playPromise = sound.play();
+  
+  if (playPromise !== undefined) {
+    playPromise.catch(error => {
+      console.warn("Audio play failed, retrying on next interaction:", error);
+    });
+  }
 }
 
 // ── Tabs ───────────────────────────────────────────────────
@@ -639,6 +709,11 @@ function initFlashcard() {
   needsFinalReview = new Set(); // Reset final review pool
   renderFlashcard();
   updateFlashcardStats();
+  
+  // Auto play first card
+  if (fcDeck.length > 0) {
+    setTimeout(() => playSpeech(fcDeck[0].en), 300);
+  }
 }
 
 function shuffleFlashcards() {
@@ -673,7 +748,12 @@ function renderFlashcard() {
 
   const word = fcDeck[fcIndex];
   document.getElementById('fc-category').textContent      = getCatLabel(word.category);
-  document.getElementById('fc-word').textContent          = word.en;
+  document.getElementById('fc-word').innerHTML            = `
+    <span>${escHtml(word.en)}</span>
+    <button class="fc-speaker-btn" onclick="event.stopPropagation(); playSpeech('${escHtml(word.en.replace(/'/g, "\\'"))}')">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+    </button>
+  `;
   document.getElementById('fc-pronunciation').textContent = word.pronunciation || '';
   document.getElementById('fc-meaning').textContent       = word.vi;
   document.getElementById('fc-example').textContent       = word.example || '';
@@ -689,7 +769,11 @@ function renderFlashcard() {
 }
 
 function flipCard() {
-  document.getElementById('card-inner').classList.toggle('flipped');
+  const cardInner = document.getElementById('card-inner');
+  cardInner.classList.toggle('flipped');
+  
+  const word = fcDeck[fcIndex];
+  if (word) playSpeech(word.en);
 }
 
 function resetCardFlip() {
@@ -697,11 +781,19 @@ function resetCardFlip() {
 }
 
 function prevCard() {
-  if (fcIndex > 0) { fcIndex--; renderFlashcard(); }
+  if (fcIndex > 0) { 
+    fcIndex--; 
+    renderFlashcard(); 
+    playSpeech(fcDeck[fcIndex].en);
+  }
 }
 
 function nextCard() {
-  if (fcIndex < fcDeck.length - 1) { fcIndex++; renderFlashcard(); }
+  if (fcIndex < fcDeck.length - 1) { 
+    fcIndex++; 
+    renderFlashcard(); 
+    playSpeech(fcDeck[fcIndex].en);
+  }
 }
 
 function rateCard(rating) {
@@ -736,6 +828,7 @@ function rateCard(rating) {
   if (fcIndex < fcDeck.length - 1) {
     fcIndex++;
     renderFlashcard();
+    playSpeech(fcDeck[fcIndex].en);
   } else {
     // Check for final review phase
     if (needsFinalReview.size > 0) {
@@ -859,6 +952,12 @@ function startQuiz() {
   quizScore     = 0;
   waitingNext   = false;
 
+  // Sound warm-up to unlock audio context in some browsers
+  correctSound.load();
+  wrongSound.load();
+  playQuizSound(true); // Small blip to unlock
+  setTimeout(() => { correctSound.pause(); correctSound.currentTime = 0; }, 50);
+
   document.getElementById('quiz-start').style.display  = 'none';
   document.getElementById('quiz-area').classList.remove('hidden');
   document.getElementById('quiz-result').classList.add('hidden');
@@ -960,6 +1059,19 @@ function renderQuestion() {
     document.getElementById('quiz-choices-area').classList.remove('hidden');
     renderChoices(q.options, w => w.en, q.word.id);
   }
+
+  // Handle Lifelines display
+  const btnHint = document.getElementById('btn-hint');
+  const btnCall = document.getElementById('btn-call');
+
+  btnHint.style.display = (q.type === 'fill') ? 'inline-flex' : 'none';
+  btnCall.style.display = (q.type === 'vi2en') ? 'inline-flex' : 'none';
+  
+  // Reset buttons state
+  [btnHint, btnCall].forEach(b => {
+    b.disabled = false;
+    b.style.opacity = '1';
+  });
 }
 
 function renderChoices(options, labelFn, correctId) {
@@ -980,6 +1092,7 @@ function selectChoice(selectedId, correctId) {
 
   const isCorrect = selectedId === correctId;
   if (isCorrect) quizScore++;
+  playQuizSound(isCorrect);
 
   btns.forEach(b => {
     const id = parseInt(b.dataset.id);
@@ -998,6 +1111,7 @@ function submitFillAnswer() {
   const isRight = answer === correct || levenshtein(answer, correct) <= 1;
 
   if (isRight) quizScore++;
+  playQuizSound(isRight);
   waitingNext = true;
   input.disabled = true;
   document.getElementById('btn-submit-answer').disabled = true;
@@ -1037,7 +1151,7 @@ function showQuizResult() {
   const pct    = Math.round((quizScore / total) * 100);
 
   let emoji, title;
-  if (pct === 100)       { emoji = '🏆'; title = 'Hoàn hảo!'; }
+  if (pct === 100)       { emoji = '🏆'; title = 'Hoàn hảo!'; playQuizSound(true); }
   else if (pct >= 80)    { emoji = '🎉'; title = 'Xuất sắc!'; }
   else if (pct >= 60)    { emoji = '👍'; title = 'Khá tốt!'; }
   else if (pct >= 40)    { emoji = '📚'; title = 'Cần ôn thêm!'; }
@@ -1059,6 +1173,73 @@ function exitQuiz() {
   if (confirm('Bạn có chắc muốn thoát Quiz? Tiến trình hiện tại sẽ bị hủy.')) {
     goToHome();
   }
+}
+
+// ── Quiz Lifelines Logic ────────────────────────────────────
+function useHint() {
+  const q = quizQuestions[quizIndex];
+  if (!q || q.type !== 'fill') return;
+
+  const btn = document.getElementById('btn-hint');
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+
+  const celeb = CELEBRITIES[Math.floor(Math.random() * CELEBRITIES.length)];
+  const word = q.word.en;
+  
+  // Create a hint: first char + underscores + last char
+  let hint = "";
+  if (word.length <= 1) {
+    hint = word;
+  } else {
+    hint = word[0] + " " + "_ ".repeat(word.length - 2) + word[word.length - 1];
+  }
+
+  showCelebModal(celeb, `${celeb.name} gợi ý cho bạn là:`, hint);
+}
+
+function useCall() {
+  const q = quizQuestions[quizIndex];
+  if (!q || q.type !== 'vi2en') return;
+
+  const btn = document.getElementById('btn-call');
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+
+  const celeb = CELEBRITIES[Math.floor(Math.random() * CELEBRITIES.length)];
+  
+  // 75% chance of picking the correct answer
+  const isWise = Math.random() < 0.75;
+  let suggestedAnswer = "";
+  
+  if (isWise) {
+    suggestedAnswer = q.word.en;
+  } else {
+    const distractors = q.options.filter(o => o.id !== q.word.id);
+    suggestedAnswer = distractors[Math.floor(Math.random() * distractors.length)].en;
+  }
+
+  const msgs = [
+    `"Alo, tôi nghĩ đáp án chuẩn là: <span class='celeb-hint-highlight'>${suggestedAnswer.toUpperCase()}</span>. Tin tôi đi!"`,
+    `"Khó thế... nhưng theo trực giác của tôi thì là <span class='celeb-hint-highlight'>${suggestedAnswer.toUpperCase()}</span> đó."`,
+    `"Dễ mà, chọn <span class='celeb-hint-highlight'>${suggestedAnswer.toUpperCase()}</span> chắc chắn luôn bạn ơi!"`
+  ];
+  
+  showCelebModal(celeb, celeb.msg, msgs[Math.floor(Math.random() * msgs.length)]);
+}
+
+function showCelebModal(celeb, msg, result) {
+  document.getElementById('celeb-img').src = celeb.img;
+  document.getElementById('celeb-name').textContent = celeb.name;
+  document.getElementById('celeb-msg').innerHTML = msg; // Support HTML
+  document.getElementById('celeb-hint-result').innerHTML = result; // Support HTML
+  document.getElementById('celeb-hint-result').style.display = result ? 'block' : 'none';
+  
+  document.getElementById('celeb-helper').classList.remove('hidden');
+}
+
+function closeCelebHelper() {
+  document.getElementById('celeb-helper').classList.add('hidden');
 }
 
 // ── Share Link ─────────────────────────────────────────────

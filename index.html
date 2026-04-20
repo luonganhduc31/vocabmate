@@ -6,6 +6,7 @@
   <title>VocabMate – Học Tiếng Anh Cùng Nhau</title>
   <meta name="description" content="Ứng dụng học tiếng Anh: thêm từ vựng, luyện flashcard, quiz và chia sẻ với bạn bè." />
   <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Comic+Neue:wght@700&display=swap" rel="stylesheet">
 </head>
 <body>
   <!-- Subtle background -->
@@ -258,6 +259,28 @@
             <div id="quiz-choices-area" class="quiz-choices-area hidden">
               <div class="quiz-choices" id="quiz-choices"></div>
             </div>
+
+            <!-- Lifeline Buttons -->
+            <div id="quiz-lifelines" class="quiz-lifelines">
+              <button id="btn-hint" class="btn btn-warning btn-sm" onclick="useHint()">💡 Gợi ý (Jack/Sơn Tùng...)</button>
+              <button id="btn-call" class="btn btn-warning btn-sm" onclick="useCall()" style="display:none">📞 Gọi người thân</button>
+            </div>
+
+            <!-- Celeb Helper Popup (Hidden by default) -->
+            <div id="celeb-helper" class="celeb-helper hidden" onclick="closeCelebHelper()">
+              <div class="celeb-content" onclick="event.stopPropagation()">
+                <div class="celeb-avatar-wrap">
+                  <img id="celeb-img" src="" alt="Celebrity" />
+                </div>
+                <div class="celeb-speech">
+                  <h4 id="celeb-name"></h4>
+                  <p id="celeb-msg"></p>
+                  <div id="celeb-hint-result" class="celeb-hint-result"></div>
+                </div>
+                <button class="celeb-close" onclick="closeCelebHelper()">✖</button>
+              </div>
+            </div>
+
             <div id="quiz-feedback" class="quiz-feedback hidden"></div>
             <button class="btn btn-outline" onclick="nextQuestion()" id="btn-next-question" style="display:none">Câu tiếp theo →</button>
           </div>
