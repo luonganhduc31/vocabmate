@@ -113,7 +113,8 @@
         <button class="tab active" data-tab="list" onclick="switchTab('list', this)" id="tab-list">📋 Danh sách</button>
         <button class="tab" data-tab="flashcard" onclick="switchTab('flashcard', this)" id="tab-flashcard">🃏 Flashcard</button>
         <button class="tab" data-tab="quiz" onclick="switchTab('quiz', this)" id="tab-quiz">🧠 Quiz</button>
-        <button class="tab" data-tab="toeic" onclick="switchTab('toeic', this)" id="tab-toeic">📘 TOEIC</button>
+        <button class="tab" data-tab="toeic" onclick="switchTab('toeic', this)" id="tab-toeic">📘 TOEIC Reading</button>
+        <button class="tab" data-tab="toeic-listen" onclick="switchTab('toeic-listen', this)" id="tab-toeic-listen">🎧 TOEIC Listen</button>
       </div>
 
       <!-- Tab: Word List -->
@@ -357,6 +358,70 @@
           </div>
         </div>
       </div>
+
+      <!-- Tab: TOEIC Listening -->
+      <div id="panel-toeic-listen" class="tab-panel hidden">
+        <div id="toeic-listen-start" class="quiz-start">
+          <div class="quiz-start-icon">🎧</div>
+          <h2>Luyện thi TOEIC Listening</h2>
+          <p>Tạo đề thi nghe tự động bằng AI và Web Speech API.</p>
+          
+          <div class="form-group" style="max-width: 300px; margin: 16px auto; text-align: left;">
+            <label style="color: var(--text-secondary); font-size: 12px; font-weight: 600;">Phần thi</label>
+            <select id="toeic-listen-part">
+              <option value="Part 2">Part 2 (Hỏi đáp)</option>
+              <option value="Part 3">Part 3 (Hội thoại ngắn)</option>
+              <option value="Part 4">Part 4 (Bài nói ngắn)</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="max-width: 300px; margin: 16px auto; text-align: left;">
+            <label style="color: var(--text-secondary); font-size: 12px; font-weight: 600;">Chủ đề</label>
+            <select id="toeic-listen-category-select"></select>
+          </div>
+
+          <button class="btn btn-primary btn-lg" onclick="generateToeicListeningTest()" id="btn-generate-toeic-listen">✨ Tạo đề thi ngay</button>
+        </div>
+
+        <div id="toeic-listen-area" class="quiz-area hidden" style="text-align: left; padding: 20px;">
+          <div class="quiz-header" style="margin-bottom: 20px;">
+            <div class="quiz-score-row" style="display: flex; justify-content: space-between; align-items: center;">
+              <h3 style="margin: 0; color: var(--primary);">Bài thi TOEIC Listening <span id="listen-part-label"></span></h3>
+              <button class="btn btn-danger-outline btn-sm" onclick="exitToeicListening()">🚪 Thoát</button>
+            </div>
+          </div>
+          
+          <div style="text-align: center; margin-bottom: 20px; padding: 20px; background: var(--surface); border-radius: 8px; border: 1px solid var(--border);">
+            <div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 15px;">
+              <button id="btn-play-audio" class="btn btn-primary" style="font-size: 16px; width: 100px; border-radius: 50px;" onclick="toggleToeicAudio()">
+                ▶️ Phát
+              </button>
+              <button id="btn-pause-audio" class="btn btn-outline" style="font-size: 16px; width: 120px; border-radius: 50px;" onclick="pauseToeicAudio()" disabled>
+                ⏸ Tạm dừng
+              </button>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 10px; width: 100%; max-width: 400px; margin: 0 auto;">
+              <span id="audio-current-time" style="font-size: 12px; color: var(--text-secondary); width: 35px;">0%</span>
+              <input type="range" id="audio-progress" value="0" min="0" max="100" style="flex: 1; cursor: pointer;" oninput="seekToeicAudio(this.value)" disabled>
+              <span id="audio-total-time" style="font-size: 12px; color: var(--text-secondary); width: 35px;">100%</span>
+            </div>
+            <p style="margin-top: 10px; font-size: 13px; color: var(--text-secondary);">Nhấn Phát để nghe. Kéo thanh trượt để tua theo từng câu.</p>
+          </div>
+
+          <div id="toeic-listen-questions-container"></div>
+          
+          <div id="toeic-listen-transcript-container" class="card" style="margin-top: 20px; display: none; background-color: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid var(--primary);">
+            <h4 style="margin-top: 0; margin-bottom: 10px; color: var(--text-primary);">Transcript</h4>
+            <div id="toeic-listen-transcript" style="white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary); font-size: 14px;"></div>
+          </div>
+
+          <div style="margin-top: 24px; display: flex; justify-content: center; gap: 12px; padding-bottom: 20px;">
+            <button class="btn btn-outline" onclick="exitToeicListening()">🚪 Thoát</button>
+            <button class="btn btn-primary" onclick="generateToeicListeningTest()" id="btn-toeic-listen-next">✨ Bài tiếp theo</button>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -427,6 +492,7 @@
   <!-- Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/davidshimjs-qrcodejs/0.0.2/qrcode.min.js"></script>
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

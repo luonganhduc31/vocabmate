@@ -160,6 +160,11 @@ function renderCategorySelect() {
   if (toeicSelect) {
     toeicSelect.innerHTML = `<option value="random">🎲 Ngẫu nhiên</option>` + optionsHtml;
   }
+
+  const toeicListenSelect = document.getElementById('toeic-listen-category-select');
+  if (toeicListenSelect) {
+    toeicListenSelect.innerHTML = `<option value="random">🎲 Ngẫu nhiên</option>` + optionsHtml;
+  }
 }
 
 function renderFilterChips() {
@@ -697,12 +702,16 @@ function switchTab(tab, btn) {
   if (tab === 'flashcard') initFlashcard();
   if (tab === 'quiz')      resetQuizToStart();
   if (tab === 'toeic')     resetToeicToStart();
+  if (tab === 'toeic-listen') {
+    if (typeof resetToeicListeningToStart === 'function') resetToeicListeningToStart();
+  }
 }
 
 function goToHome() {
   switchTab('list', document.getElementById('tab-list'));
   resetQuizToStart();
   if (typeof resetToeicToStart === 'function') resetToeicToStart();
+  if (typeof resetToeicListeningToStart === 'function') resetToeicListeningToStart();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1181,8 +1190,6 @@ function exitQuiz() {
     goToHome();
   }
 }
-
-const GEMINI_API_KEY = "AIzaSyD-f9L_yaGSGiHrVQXDxecZT_SO047mzoM";
 
 async function callGeminiAPI(prompt, isJsonMode = false) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
@@ -1804,4 +1811,506 @@ function checkToeicAnswer(qIndex, selected, correct) {
   });
 
   document.getElementById(`toeic-exp-${qIndex}`).style.display = 'block';
+}
+
+// ── TOEIC Listening ────────────────────────────────────────
+
+let currentListeningData = null;
+let isPlayingAudio = false;
+let isPausedAudio = false;
+let listeningAudioChunks = [];
+let currentAudioChunkIndex = 0;
+
+function resetToeicListeningToStart() {
+  const listenStart = document.getElementById('toeic-listen-start');
+  const listenArea = document.getElementById('toeic-listen-area');
+  if (listenStart) listenStart.style.display = 'block';
+  if (listenArea) listenArea.classList.add('hidden');
+  stopTOEICAudio();
+}
+
+function exitToeicListening() {
+  if (confirm('Bạn có chắc muốn thoát bài thi TOEIC Listening?')) {
+    resetToeicListeningToStart();
+  }
+}
+
+async function generateToeicListeningTest() {
+  stopTOEICAudio();
+  const part = document.getElementById('toeic-listen-part').value;
+  const topicChoice = document.getElementById('toeic-listen-category-select').value;
+  
+  let pool = [];
+  if (topicChoice === 'random') {
+    pool = [...vocab];
+  } else {
+    pool = vocab.filter(w => w.category === topicChoice);
+  }
+  const vocabSample = shuffle(pool).slice(0, 15).map(w => `${w.en} (${w.vi})`).join(', ');
+
+  const btn = document.getElementById('btn-generate-toeic-listen');
+  const btnNext = document.getElementById('btn-toeic-listen-next');
+  
+  if (btn) {
+    btn.innerHTML = '⌛ AI đang soạn đề...';
+    btn.disabled = true;
+  }
+  if (btnNext) {
+    btnNext.innerHTML = '⌛ Đang soạn...';
+    btnNext.disabled = true;
+  }
+
+  let prompt = '';
+  if (part === 'Part 2') {
+    prompt = `Bạn là chuyên gia soạn đề TOEIC Listening Part 2.
+Nhiệm vụ: Tạo 01 câu hỏi Question-Response.
+
+YÊU CẦU:
+- Nội dung: Ưu tiên sử dụng các từ vựng sau nếu có thể: ${vocabSample}. (Tự chọn ngữ cảnh)
+- Bẫy: Sử dụng bẫy lặp từ (repeated words) hoặc bẫy âm thanh tương tự (distractors).
+
+CẤU TRÚC JSON TRẢ VỀ (CHỈ TRẢ JSON, KHÔNG MARKDOWN):
+{
+  "part": 2,
+  "audio_script": "Question: [Câu hỏi]. A: [Lựa chọn A]. B: [Lựa chọn B]. C: [Lựa chọn C].",
+  "transcript": {
+    "question": "...",
+    "options": {"A": "...", "B": "...", "C": "..."}
+  },
+  "answer": "A, B hoặc C",
+  "explanation": "Giải thích chi tiết bẫy và từ vựng bằng tiếng Việt."
+}`;
+  } else if (part === 'Part 3') {
+    prompt = `Bạn là chuyên gia soạn đề TOEIC Listening Part 3.
+Nhiệm vụ: Tạo 01 đoạn hội thoại giữa 2-3 người và 03 câu hỏi liên quan.
+
+YÊU CẦU:
+- Ngữ cảnh: Ưu tiên sử dụng các từ vựng sau: ${vocabSample}. (Tự chọn tình huống)
+- Cấu trúc: Đoạn thoại phải có ít nhất 4-6 lượt nói.
+
+CẤU TRÚC JSON TRẢ VỀ (CHỈ TRẢ JSON, KHÔNG MARKDOWN):
+{
+  "part": 3,
+  "audio_script": "[Toàn bộ nội dung hội thoại để máy đọc]",
+  "questions": [
+    {
+      "id": 1,
+      "question": "Câu hỏi 1...",
+      "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
+      "answer": "A, B, C hoặc D",
+      "explanation": "..."
+    },
+    {
+      "id": 2,
+      "question": "Câu hỏi 2...",
+      "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
+      "answer": "A, B, C hoặc D",
+      "explanation": "..."
+    },
+    {
+      "id": 3,
+      "question": "Câu hỏi 3...",
+      "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
+      "answer": "A, B, C hoặc D",
+      "explanation": "..."
+    }
+  ]
+}`;
+  } else if (part === 'Part 4') {
+    prompt = `Bạn là chuyên gia soạn đề TOEIC Listening Part 4.
+Nhiệm vụ: Tạo 01 bài nói ngắn (Short Talk) và 03 câu hỏi liên quan.
+
+YÊU CẦU:
+- Loại bài nói: Ưu tiên sử dụng các từ vựng sau: ${vocabSample}. (Tự chọn loại bài: thông báo, tin nhắn thoại...)
+
+CẤU TRÚC JSON TRẢ VỀ (CHỈ TRẢ JSON, KHÔNG MARKDOWN):
+{
+  "part": 4,
+  "audio_script": "[Nội dung bài nói để máy đọc]",
+  "questions": [
+    {
+      "id": 1,
+      "question": "...",
+      "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
+      "answer": "A, B, C hoặc D",
+      "explanation": "..."
+    },
+    {
+      "id": 2,
+      "question": "...",
+      "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
+      "answer": "A, B, C hoặc D",
+      "explanation": "..."
+    },
+    {
+      "id": 3,
+      "question": "...",
+      "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
+      "answer": "A, B, C hoặc D",
+      "explanation": "..."
+    }
+  ]
+}`;
+  }
+
+  try {
+    const responseText = await callGeminiAPI(prompt, true);
+    
+    let jsonStr = responseText.trim();
+    const match = jsonStr.match(/```json\s*([\s\S]*?)\s*```/);
+    if (match) {
+      jsonStr = match[1];
+    } else {
+      const match2 = jsonStr.match(/```\s*([\s\S]*?)\s*```/);
+      if (match2) {
+        jsonStr = match2[1];
+      }
+    }
+    
+    let data;
+    try {
+      data = JSON.parse(jsonStr);
+    } catch (parseError) {
+      console.error("JSON Parse Error. Raw string:", jsonStr);
+      throw new Error("AI trả về định dạng không hợp lệ. Vui lòng thử lại!");
+    }
+    
+    currentListeningData = data;
+    renderToeicListeningTest(data, part);
+
+  } catch (error) {
+    console.error("Lỗi khi tạo đề TOEIC Listening:", error);
+    alert('Không thể tạo đề thi lúc này. Lỗi: ' + error.message);
+  } finally {
+    if (btn) {
+      btn.innerHTML = '✨ Tạo đề thi ngay';
+      btn.disabled = false;
+    }
+    if (btnNext) {
+      btnNext.innerHTML = '✨ Bài tiếp theo';
+      btnNext.disabled = false;
+    }
+  }
+}
+
+function renderToeicListeningTest(data, partStr) {
+  document.getElementById('toeic-listen-start').style.display = 'none';
+  document.getElementById('toeic-listen-area').classList.remove('hidden');
+  document.getElementById('listen-part-label').textContent = "- " + partStr;
+
+  const qsContainer = document.getElementById('toeic-listen-questions-container');
+  qsContainer.innerHTML = '';
+  
+  const transContainer = document.getElementById('toeic-listen-transcript-container');
+  const transEl = document.getElementById('toeic-listen-transcript');
+  transContainer.style.display = 'none'; // hidden until answered
+
+  let transcriptHtml = '';
+
+  if (data.part === 2) {
+    transcriptHtml = `<strong>Question:</strong> ${escHtml(data.transcript.question)}<br/>`;
+    for (const [key, val] of Object.entries(data.transcript.options)) {
+      transcriptHtml += `<strong>${key}:</strong> ${escHtml(val)}<br/>`;
+    }
+
+    const qDiv = document.createElement('div');
+    qDiv.className = 'card';
+    qDiv.style.marginBottom = '16px';
+    qDiv.style.textAlign = 'left';
+
+    let html = `<h4 style="margin-top: 0;">Câu hỏi Part 2 (Nghe và chọn đáp án)</h4>`;
+    html += `<div class="toeic-options" id="toeic-listen-opts-p2">`;
+    
+    const opts = ['A', 'B', 'C'];
+    for (const key of opts) {
+      html += `
+        <label class="toeic-option-label" style="display: block; padding: 8px; margin: 4px 0; border: 1px solid var(--border); border-radius: 6px; cursor: pointer;">
+          <input type="radio" name="toeic-listen-q-p2" value="${key}" onchange="checkToeicListenAnswer('p2', '${key}', '${data.answer}', 2)" style="margin-right: 8px;" />
+          <strong>${key}</strong>
+        </label>
+      `;
+    }
+    html += `</div>`;
+    html += `
+      <div id="toeic-listen-exp-p2" style="display: none; margin-top: 12px; padding: 12px; background: #e0f2fe; border-left: 4px solid var(--primary); border-radius: 4px;">
+        <p><strong>Đáp án đúng: ${data.answer}</strong></p>
+        <p>${escHtml(data.explanation)}</p>
+      </div>
+    `;
+
+    qDiv.innerHTML = html;
+    qsContainer.appendChild(qDiv);
+
+  } else {
+    // Part 3 and 4
+    transcriptHtml = data.audio_script.split('\\n').map(p => p.trim() ? `<p>${escHtml(p)}</p>` : '').join('');
+
+    data.questions.forEach((q, index) => {
+      const qDiv = document.createElement('div');
+      qDiv.className = 'card';
+      qDiv.style.marginBottom = '16px';
+      qDiv.style.textAlign = 'left';
+
+      let html = `<h4 style="margin-top: 0;">Câu ${q.id}: ${escHtml(q.question)}</h4>`;
+      html += `<div class="toeic-options" id="toeic-listen-opts-${q.id}">`;
+      
+      for (const [key, val] of Object.entries(q.options)) {
+        html += `
+          <label class="toeic-option-label" style="display: block; padding: 8px; margin: 4px 0; border: 1px solid var(--border); border-radius: 6px; cursor: pointer;">
+            <input type="radio" name="toeic-listen-q-${q.id}" value="${key}" onchange="checkToeicListenAnswer('${q.id}', '${key}', '${q.answer}', ${data.part})" style="margin-right: 8px;" />
+            <strong>${key}.</strong> ${escHtml(val)}
+          </label>
+        `;
+      }
+      html += `</div>`;
+
+      html += `
+        <div id="toeic-listen-exp-${q.id}" style="display: none; margin-top: 12px; padding: 12px; background: #e0f2fe; border-left: 4px solid var(--primary); border-radius: 4px;">
+          <p><strong>Đáp án đúng: ${q.answer}</strong></p>
+          <p>${escHtml(q.explanation)}</p>
+        </div>
+      `;
+
+      qDiv.innerHTML = html;
+      qsContainer.appendChild(qDiv);
+    });
+  }
+
+  transEl.innerHTML = transcriptHtml;
+}
+
+function checkToeicListenAnswer(qId, selected, correct, part) {
+  // Extract just the letter if correct answer has spaces or something like "A."
+  const cleanCorrect = correct.trim()[0].toUpperCase();
+  
+  const optsContainer = document.getElementById(`toeic-listen-opts-${qId}`);
+  const labels = optsContainer.querySelectorAll('label');
+  
+  labels.forEach(label => {
+    const radio = label.querySelector('input');
+    radio.disabled = true;
+    if (radio.value === cleanCorrect) {
+      label.style.backgroundColor = '#dcfce7';
+      label.style.borderColor = '#22c55e';
+    } else if (radio.value === selected && selected !== cleanCorrect) {
+      label.style.backgroundColor = '#fee2e2';
+      label.style.borderColor = '#ef4444';
+    }
+  });
+
+  document.getElementById(`toeic-listen-exp-${qId}`).style.display = 'block';
+
+  // Check if all questions are answered, then show transcript
+  if (part === 2) {
+    document.getElementById('toeic-listen-transcript-container').style.display = 'block';
+  } else {
+    // Check if all radios are disabled in all questions
+    const allLabels = document.getElementById('toeic-listen-questions-container').querySelectorAll('label');
+    const totalGroups = currentListeningData.questions.length;
+    let answeredGroups = 0;
+    
+    currentListeningData.questions.forEach(q => {
+      const gContainer = document.getElementById(`toeic-listen-opts-${q.id}`);
+      if (gContainer) {
+        const firstInput = gContainer.querySelector('input');
+        if (firstInput && firstInput.disabled) {
+          answeredGroups++;
+        }
+      }
+    });
+
+    if (answeredGroups === totalGroups) {
+      document.getElementById('toeic-listen-transcript-container').style.display = 'block';
+    }
+  }
+}
+
+function chunkListeningText(scriptText) {
+  let chunks = [];
+  if (scriptText.includes('Question:') && scriptText.includes('A:')) {
+    let qSplit = scriptText.split('A:');
+    chunks.push({ text: qSplit[0].trim(), delayAfter: 1000 });
+    if (qSplit.length > 1) {
+      let aSplit = qSplit[1].split('B:');
+      chunks.push({ text: 'A: ' + aSplit[0].trim(), delayAfter: 500 });
+      if (aSplit.length > 1) {
+        let bSplit = aSplit[1].split('C:');
+        chunks.push({ text: 'B: ' + bSplit[0].trim(), delayAfter: 500 });
+        if (bSplit.length > 1) {
+          chunks.push({ text: 'C: ' + bSplit[1].trim(), delayAfter: 500 });
+        }
+      }
+    }
+  } else {
+    let sentences = scriptText.match(/[^.?!]+[.?!]*(?:\s|$)/g)?.map(s => s.trim()).filter(s => s.length > 0) || [scriptText];
+    chunks = sentences.map(s => ({ text: s, delayAfter: 300 }));
+  }
+  return chunks;
+}
+
+function updateAudioProgressUI() {
+  const progress = document.getElementById('audio-progress');
+  const currentSpan = document.getElementById('audio-current-time');
+  
+  if (listeningAudioChunks.length === 0) {
+    if (progress) progress.value = 0;
+    if (currentSpan) currentSpan.textContent = '0%';
+    return;
+  }
+  
+  const percent = Math.round((currentAudioChunkIndex / listeningAudioChunks.length) * 100);
+  if (progress) progress.value = percent;
+  if (currentSpan) currentSpan.textContent = percent + '%';
+}
+
+async function speakTOEIC(startIndex = 0) {
+  if (!window.speechSynthesis) {
+    alert("Trình duyệt không hỗ trợ Web Speech API.");
+    return;
+  }
+  window.speechSynthesis.cancel();
+  isPlayingAudio = true;
+  isPausedAudio = false;
+  currentAudioChunkIndex = startIndex;
+
+  const getVoice = () => {
+    return new Promise(resolve => {
+      let voices = window.speechSynthesis.getVoices();
+      if (voices.length) {
+        let voice = voices.find(v => v.name.includes('Google US English')) || 
+                    voices.find(v => v.lang === 'en-US' || v.lang === 'en_US') || voices[0];
+        resolve(voice);
+      } else {
+        window.speechSynthesis.onvoiceschanged = () => {
+          voices = window.speechSynthesis.getVoices();
+          let voice = voices.find(v => v.name.includes('Google US English')) || 
+                      voices.find(v => v.lang === 'en-US' || v.lang === 'en_US') || voices[0];
+          resolve(voice);
+        };
+      }
+    });
+  };
+
+  const voice = await getVoice();
+
+  const playChunk = (index) => {
+    if (!isPlayingAudio) return;
+    if (index >= listeningAudioChunks.length) {
+      stopTOEICAudio();
+      return;
+    }
+    
+    currentAudioChunkIndex = index;
+    updateAudioProgressUI();
+    
+    let u = new SpeechSynthesisUtterance(listeningAudioChunks[index].text);
+    if (voice) u.voice = voice;
+    u.rate = 0.9;
+    
+    u.onend = () => {
+      if (!isPlayingAudio) return;
+      setTimeout(() => {
+        if (!isPausedAudio && isPlayingAudio) {
+          playChunk(currentAudioChunkIndex + 1);
+        } else if (isPausedAudio) {
+          // If paused during delay, we wait. We just increment index, 
+          // when resumed, pauseToeicAudio() will need to handle if we are mid-delay.
+          // Actually, window.speechSynthesis.pause() pauses active speech.
+          // Mid-delay resume requires manual trigger. 
+          // To keep it simple, if paused, we just leave it. 
+          currentAudioChunkIndex++; 
+        }
+      }, listeningAudioChunks[index].delayAfter);
+    };
+    
+    u.onerror = () => {
+      stopTOEICAudio();
+    };
+    
+    window.speechSynthesis.speak(u);
+  };
+
+  playChunk(currentAudioChunkIndex);
+}
+
+function stopTOEICAudio() {
+  isPlayingAudio = false;
+  isPausedAudio = false;
+  currentAudioChunkIndex = 0;
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  
+  const btnPlay = document.getElementById('btn-play-audio');
+  const btnPause = document.getElementById('btn-pause-audio');
+  const progress = document.getElementById('audio-progress');
+  
+  if (btnPlay) {
+    btnPlay.innerHTML = '▶️ Phát';
+    btnPlay.classList.remove('btn-danger');
+    btnPlay.classList.add('btn-primary');
+  }
+  if (btnPause) {
+    btnPause.innerHTML = '⏸ Tạm dừng';
+    btnPause.disabled = true;
+  }
+  if (progress) {
+    progress.disabled = true;
+    updateAudioProgressUI();
+  }
+}
+
+function pauseToeicAudio() {
+  const btnPause = document.getElementById('btn-pause-audio');
+  if (isPausedAudio) {
+    isPausedAudio = false;
+    btnPause.innerHTML = '⏸ Tạm dừng';
+    // If we resumed and it's not speaking, we might have paused during delay
+    if (!window.speechSynthesis.speaking) {
+      speakTOEIC(currentAudioChunkIndex);
+    } else {
+      window.speechSynthesis.resume();
+    }
+  } else {
+    isPausedAudio = true;
+    btnPause.innerHTML = '▶️ Tiếp tục';
+    window.speechSynthesis.pause();
+  }
+}
+
+function seekToeicAudio(percentVal) {
+  if (listeningAudioChunks.length === 0) return;
+  const targetIndex = Math.floor((percentVal / 100) * listeningAudioChunks.length);
+  currentAudioChunkIndex = Math.min(targetIndex, listeningAudioChunks.length - 1);
+  updateAudioProgressUI();
+  
+  if (isPlayingAudio) {
+    window.speechSynthesis.cancel();
+    isPausedAudio = false;
+    const btnPause = document.getElementById('btn-pause-audio');
+    if (btnPause) btnPause.innerHTML = '⏸ Tạm dừng';
+    speakTOEIC(currentAudioChunkIndex);
+  }
+}
+
+function toggleToeicAudio() {
+  const btnPlay = document.getElementById('btn-play-audio');
+  const btnPause = document.getElementById('btn-pause-audio');
+  const progress = document.getElementById('audio-progress');
+  
+  if (isPlayingAudio) {
+    stopTOEICAudio();
+  } else {
+    if (currentListeningData && currentListeningData.audio_script) {
+      listeningAudioChunks = chunkListeningText(currentListeningData.audio_script);
+      
+      if (btnPlay) {
+        btnPlay.innerHTML = '⏹ Dừng';
+        btnPlay.classList.remove('btn-primary');
+        btnPlay.classList.add('btn-danger');
+      }
+      if (btnPause) btnPause.disabled = false;
+      if (progress) progress.disabled = false;
+      
+      speakTOEIC(0);
+    }
+  }
 }
