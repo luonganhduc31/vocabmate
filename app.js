@@ -155,6 +155,11 @@ function renderCategorySelect() {
   if (quizSelect) {
     quizSelect.innerHTML = `<option value="random50">🎲 Ngẫu nhiên (50 từ)</option>` + optionsHtml;
   }
+
+  const toeicSelect = document.getElementById('toeic-category-select');
+  if (toeicSelect) {
+    toeicSelect.innerHTML = `<option value="random">🎲 Ngẫu nhiên</option>` + optionsHtml;
+  }
 }
 
 function renderFilterChips() {
@@ -691,11 +696,13 @@ function switchTab(tab, btn) {
 
   if (tab === 'flashcard') initFlashcard();
   if (tab === 'quiz')      resetQuizToStart();
+  if (tab === 'toeic')     resetToeicToStart();
 }
 
 function goToHome() {
   switchTab('list', document.getElementById('tab-list'));
   resetQuizToStart();
+  if (typeof resetToeicToStart === 'function') resetToeicToStart();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1175,8 +1182,39 @@ function exitQuiz() {
   }
 }
 
-// ── Quiz Lifelines Logic ────────────────────────────────────
-function useHint() {
+const GEMINI_API_KEY = "AIzaSyD-f9L_yaGSGiHrVQXDxecZT_SO047mzoM";
+
+async function callGeminiAPI(prompt, isJsonMode = false) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  
+  const bodyData = {
+    contents: [{
+      parts: [{
+        text: prompt
+      }]
+    }]
+  };
+
+  // Tuyệt đối không thêm generation_config vào lúc này để kiểm tra kết nối
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(bodyData)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Gemini API Error:", response.status, errorText);
+    throw new Error(`API Error ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.candidates[0].content.parts[0].text;
+}
+async function useHint() {
   const q = quizQuestions[quizIndex];
   if (!q || q.type !== 'fill') return;
 
@@ -1186,19 +1224,35 @@ function useHint() {
 
   const celeb = CELEBRITIES[Math.floor(Math.random() * CELEBRITIES.length)];
   const word = q.word.en;
+  const vi = q.word.vi;
   
-  // Create a hint: first char + underscores + last char
-  let hint = "";
-  if (word.length <= 1) {
-    hint = word;
-  } else {
-    hint = word[0] + " " + "_ ".repeat(word.length - 2) + word[word.length - 1];
-  }
+  const originalText = btn.innerHTML;
+  btn.innerHTML = `⌛ Đang hỏi ${celeb.name}...`;
 
-  showCelebModal(celeb, `${celeb.name} gợi ý cho bạn là:`, hint);
+  try {
+    const prompt = `Đóng vai ${celeb.name}, hãy đưa ra một câu nói ngắn gọn (khoảng 2-3 câu), hài hước và mang đậm phong cách đặc trưng của bạn để gợi ý cho người chơi về từ tiếng Anh "${word}" (nghĩa là "${vi}"). Tuyệt đối không được viết ra từ "${word}" trong câu trả lời.`;
+    const response = await callGeminiAPI(prompt);
+
+    // Create a hint: first char + underscores + last char
+    let hint = "";
+    if (word.length <= 1) {
+      hint = word;
+    } else {
+      hint = word[0] + " " + "_ ".repeat(word.length - 2) + word[word.length - 1];
+    }
+
+    showCelebModal(celeb, response, hint);
+  } catch (error) {
+    console.error("Gemini API Error:", error);
+    // Fallback if API fails
+    let hint = word.length <= 1 ? word : word[0] + " " + "_ ".repeat(word.length - 2) + word[word.length - 1];
+    showCelebModal(celeb, `${celeb.name} gợi ý cho bạn là:`, hint);
+  } finally {
+    btn.innerHTML = originalText;
+  }
 }
 
-function useCall() {
+async function useCall() {
   const q = quizQuestions[quizIndex];
   if (!q || q.type !== 'vi2en') return;
 
@@ -1207,25 +1261,38 @@ function useCall() {
   btn.style.opacity = '0.5';
 
   const celeb = CELEBRITIES[Math.floor(Math.random() * CELEBRITIES.length)];
-  
-  // 75% chance of picking the correct answer
-  const isWise = Math.random() < 0.75;
-  let suggestedAnswer = "";
-  
-  if (isWise) {
-    suggestedAnswer = q.word.en;
-  } else {
-    const distractors = q.options.filter(o => o.id !== q.word.id);
-    suggestedAnswer = distractors[Math.floor(Math.random() * distractors.length)].en;
-  }
+  const word = q.word.en;
+  const vi = q.word.vi;
+  const options = q.options.map(o => o.en).join(', ');
 
-  const msgs = [
-    `"Alo, tôi nghĩ đáp án chuẩn là: <span class='celeb-hint-highlight'>${suggestedAnswer.toUpperCase()}</span>. Tin tôi đi!"`,
-    `"Khó thế... nhưng theo trực giác của tôi thì là <span class='celeb-hint-highlight'>${suggestedAnswer.toUpperCase()}</span> đó."`,
-    `"Dễ mà, chọn <span class='celeb-hint-highlight'>${suggestedAnswer.toUpperCase()}</span> chắc chắn luôn bạn ơi!"`
-  ];
-  
-  showCelebModal(celeb, celeb.msg, msgs[Math.floor(Math.random() * msgs.length)]);
+  const originalText = btn.innerHTML;
+  btn.innerHTML = `📞 Đang gọi ${celeb.name}...`;
+
+  try {
+    const prompt = `Đóng vai ${celeb.name}, người chơi đang không biết từ tiếng Anh nào có nghĩa là "${vi}". Các lựa chọn là: ${options}. Đáp án đúng là "${word}". Hãy đưa ra một lời khuyên ngắn gọn (khoảng 2-3 câu), hài hước, mang đậm phong cách của bạn để khuyên người chơi chọn đáp án "${word}". Bạn có thể giả vờ không chắc chắn hoặc tự tin tuyệt đối, nhưng phải khuyên đúng.`;
+    const response = await callGeminiAPI(prompt);
+    
+    showCelebModal(celeb, response, "");
+  } catch (error) {
+    console.error("Gemini API Error:", error);
+    // Fallback if API fails
+    const isWise = Math.random() < 0.75;
+    let suggestedAnswer = "";
+    if (isWise) {
+      suggestedAnswer = q.word.en;
+    } else {
+      const distractors = q.options.filter(o => o.id !== q.word.id);
+      suggestedAnswer = distractors[Math.floor(Math.random() * distractors.length)].en;
+    }
+    const msgs = [
+      `"Alo, tôi nghĩ đáp án chuẩn là: <span class='celeb-hint-highlight'>${suggestedAnswer.toUpperCase()}</span>. Tin tôi đi!"`,
+      `"Khó thế... nhưng theo trực giác của tôi thì là <span class='celeb-hint-highlight'>${suggestedAnswer.toUpperCase()}</span> đó."`,
+      `"Dễ mà, chọn <span class='celeb-hint-highlight'>${suggestedAnswer.toUpperCase()}</span> chắc chắn luôn bạn ơi!"`
+    ];
+    showCelebModal(celeb, celeb.msg, msgs[Math.floor(Math.random() * msgs.length)]);
+  } finally {
+    btn.innerHTML = originalText;
+  }
 }
 
 function showCelebModal(celeb, msg, result) {
@@ -1541,4 +1608,200 @@ function levenshtein(a, b) {
     }
   }
   return dp[m][n];
+}
+
+// ── TOEIC Reading ──────────────────────────────────────────
+
+let currentToeicData = null;
+
+function resetToeicToStart() {
+  const toeicStart = document.getElementById('toeic-start');
+  const toeicArea = document.getElementById('toeic-area');
+  if (toeicStart) toeicStart.style.display = 'block';
+  if (toeicArea) toeicArea.classList.add('hidden');
+}
+
+function exitToeic() {
+  if (confirm('Bạn có chắc muốn thoát bài thi TOEIC?')) {
+    resetToeicToStart();
+  }
+}
+
+async function generateToeicTest() {
+  const level = document.getElementById('toeic-level').value;
+  const part = document.getElementById('toeic-part').value;
+  const catChoice = document.getElementById('toeic-category-select').value;
+  
+  let pool = [];
+  if (catChoice === 'random') {
+    pool = [...vocab];
+  } else {
+    pool = vocab.filter(w => w.category === catChoice);
+  }
+
+  // Get up to 15 words from pool to feed the prompt
+  const vocabSample = shuffle(pool).slice(0, 15).map(w => `${w.en} (${w.vi})`).join(', ');
+
+  const btn = document.getElementById('btn-generate-toeic');
+  const btnNext = document.getElementById('btn-toeic-next');
+  
+  if (btn) {
+    btn.innerHTML = '⌛ AI đang soạn đề...';
+    btn.disabled = true;
+  }
+  if (btnNext) {
+    btnNext.innerHTML = '⌛ Đang soạn...';
+    btnNext.disabled = true;
+  }
+
+  try {
+    const prompt = `Bạn là chuyên gia soạn đề thi TOEIC Reading tại ETS với 15 năm kinh nghiệm.
+Nhiệm vụ: Tạo 01 bộ câu hỏi TOEIC Reading chất lượng cao theo yêu cầu.
+
+YÊU CẦU NỘI DUNG:
+- TRÌNH ĐỘ: ${level}.
+- PHẦN THI: ${part}.
+- CHỦ ĐỀ: Tự chọn, nhưng ưu tiên sử dụng các từ vựng sau nếu có thể: ${vocabSample}. (Nếu danh sách rỗng, hãy tự chọn từ vựng phù hợp với trình độ TOEIC)
+
+TUYỆT ĐỐI TUÂN THỦ CHIẾN THUẬT RA ĐỀ & BẪY (CHUẨN ETS):
+- Nếu là Part 5: BẮT BUỘC phải tạo 10 câu hỏi riêng lẻ. Các câu hỏi phải chia đều vào 3 loại bẫy: (1) Word Form (đáp án cùng gốc từ nhưng khác loại từ: danh, động, tính, trạng), (2) Word Choice (các từ vựng rất gần nghĩa nhau nhưng khác sắc thái/ngữ cảnh sử dụng), (3) Prepositions/Collocations (giới từ đi kèm cụm từ cố định).
+- Nếu là Part 6: Đoạn văn phải có tính liên kết chặt chẽ. BẮT BUỘC phải có ít nhất 1 câu hỏi dạng "Điền nguyên một câu trọn vẹn vào đoạn văn", đòi hỏi người đọc phải hiểu ngữ cảnh của câu phía trước và phía sau. Tổng cộng 3-4 câu hỏi.
+- Nếu là Part 7: Văn bản phải mang tính thực tế cao (Email công việc, Thông báo/Memo, Online Chat, Quảng cáo). BẮT BUỘC đáp án đúng phải sử dụng Paraphrasing (dùng từ đồng nghĩa để diễn đạt lại thông tin trong bài, KHÔNG dùng lại từ gốc). BẮT BUỘC đáp án nhiễu phải chứa các từ khóa y hệt trong bài đọc nhưng làm sai lệch ngữ cảnh, sai đối tượng hoặc sai thời gian để đánh lừa. Tổng cộng 3-4 câu hỏi.
+
+ĐỊNH DẠNG TRẢ VỀ: Trả về **DUY NHẤT** một object JSON hợp lệ, không có markdown block hay văn bản nào khác. Format JSON:
+{
+  "passage": "Nội dung đoạn văn (nếu là Part 6, 7). Nếu là Part 5, hãy để chuỗi rỗng.",
+  "questions": [
+    {
+      "question_text": "Nội dung câu hỏi (Nếu Part 5 thì đây là câu chứa ô trống)",
+      "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
+      "correct_answer": "Chữ cái đáp án (A, B, C hoặc D)",
+      "explanation_vn": "Giải thích chi tiết tại sao đúng, phân tích bẫy và cung cấp cấu trúc ngữ pháp quan trọng.",
+      "paraphrase_key": "Cặp từ đồng nghĩa giữa bài đọc và đáp án (Dành cho Part 7), nếu không có để rỗng",
+      "trap_category": "Phân loại bẫy (ví dụ: Word Form, Distractor Confusion)"
+    }
+  ],
+  "vocabulary_list": [{"word": "...", "meaning": "...", "example": "..."}]
+}`;
+
+    const responseText = await callGeminiAPI(prompt, true);
+    
+    // Attempt to parse JSON from response. 
+    let jsonStr = responseText.trim();
+    const match = jsonStr.match(/```json\s*([\s\S]*?)\s*```/);
+    if (match) {
+      jsonStr = match[1];
+    } else {
+      const match2 = jsonStr.match(/```\s*([\s\S]*?)\s*```/);
+      if (match2) {
+        jsonStr = match2[1];
+      }
+    }
+    
+    let data;
+    try {
+      data = JSON.parse(jsonStr);
+    } catch (parseError) {
+      console.error("JSON Parse Error. Raw string:", jsonStr);
+      throw new Error("AI trả về định dạng không hợp lệ. Vui lòng thử lại!");
+    }
+    
+    currentToeicData = data;
+    renderToeicTest(data, part);
+
+  } catch (error) {
+    console.error("Lỗi khi tạo đề TOEIC:", error);
+    alert('Không thể tạo đề thi lúc này. Lỗi: ' + error.message);
+  } finally {
+    if (btn) {
+      btn.innerHTML = '✨ Tạo đề thi ngay';
+      btn.disabled = false;
+    }
+    if (btnNext) {
+      btnNext.innerHTML = '✨ Tiếp theo';
+      btnNext.disabled = false;
+    }
+  }
+}
+
+function renderToeicTest(data, part) {
+  document.getElementById('toeic-start').style.display = 'none';
+  document.getElementById('toeic-area').classList.remove('hidden');
+
+  const passageContainer = document.getElementById('toeic-passage-container');
+  const passageEl = document.getElementById('toeic-passage');
+  
+  if (data.passage && data.passage.trim() !== '') {
+    passageContainer.style.display = 'block';
+    // Split passage into paragraphs
+    passageEl.innerHTML = data.passage.split('\n').map(p => p.trim() ? `<p>${escHtml(p)}</p>` : '').join('');
+  } else {
+    passageContainer.style.display = 'none';
+  }
+
+  const qsContainer = document.getElementById('toeic-questions-container');
+  qsContainer.innerHTML = '';
+
+  data.questions.forEach((q, index) => {
+    const qDiv = document.createElement('div');
+    qDiv.className = 'card';
+    qDiv.style.marginBottom = '16px';
+    qDiv.style.textAlign = 'left';
+
+    let html = `<h4 style="margin-top: 0;">Câu ${index + 1}: ${escHtml(q.question_text)}</h4>`;
+    html += `<div class="toeic-options" id="toeic-opts-${index}">`;
+    
+    for (const [key, val] of Object.entries(q.options)) {
+      html += `
+        <label class="toeic-option-label" style="display: block; padding: 8px; margin: 4px 0; border: 1px solid var(--border); border-radius: 6px; cursor: pointer;">
+          <input type="radio" name="toeic-q-${index}" value="${key}" onchange="checkToeicAnswer(${index}, '${key}', '${q.correct_answer}')" style="margin-right: 8px;" />
+          <strong>${key}.</strong> ${escHtml(val)}
+        </label>
+      `;
+    }
+    html += `</div>`;
+
+    html += `
+      <div id="toeic-exp-${index}" style="display: none; margin-top: 12px; padding: 12px; background: #e0f2fe; border-left: 4px solid var(--primary); border-radius: 4px;">
+        <p><strong>Đáp án đúng: ${q.correct_answer}</strong></p>
+        <p>${escHtml(q.explanation_vn)}</p>
+        ${q.trap_category ? `<p><em>Bẫy: ${escHtml(q.trap_category)}</em></p>` : ''}
+        ${q.paraphrase_key ? `<p><em>Paraphrase: ${escHtml(q.paraphrase_key)}</em></p>` : ''}
+      </div>
+    `;
+
+    qDiv.innerHTML = html;
+    qsContainer.appendChild(qDiv);
+  });
+
+  const vocabContainer = document.getElementById('toeic-vocabulary-container');
+  const vocabList = document.getElementById('toeic-vocabulary-list');
+  
+  if (data.vocabulary_list && data.vocabulary_list.length > 0) {
+    vocabContainer.style.display = 'block';
+    vocabList.innerHTML = data.vocabulary_list.map(v => 
+      `<li><strong>${escHtml(v.word)}</strong>: ${escHtml(v.meaning)} <br/><span style="color:var(--text-muted); font-size:12px;">Ví dụ: ${escHtml(v.example)}</span></li>`
+    ).join('');
+  } else {
+    vocabContainer.style.display = 'none';
+  }
+}
+
+function checkToeicAnswer(qIndex, selected, correct) {
+  const optsContainer = document.getElementById(`toeic-opts-${qIndex}`);
+  const labels = optsContainer.querySelectorAll('label');
+  
+  labels.forEach(label => {
+    const radio = label.querySelector('input');
+    radio.disabled = true; // Disable after answer
+    if (radio.value === correct) {
+      label.style.backgroundColor = '#dcfce7'; // green-100
+      label.style.borderColor = '#22c55e';
+    } else if (radio.value === selected && selected !== correct) {
+      label.style.backgroundColor = '#fee2e2'; // red-100
+      label.style.borderColor = '#ef4444';
+    }
+  });
+
+  document.getElementById(`toeic-exp-${qIndex}`).style.display = 'block';
 }

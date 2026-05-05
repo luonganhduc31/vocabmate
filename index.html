@@ -113,6 +113,7 @@
         <button class="tab active" data-tab="list" onclick="switchTab('list', this)" id="tab-list">📋 Danh sách</button>
         <button class="tab" data-tab="flashcard" onclick="switchTab('flashcard', this)" id="tab-flashcard">🃏 Flashcard</button>
         <button class="tab" data-tab="quiz" onclick="switchTab('quiz', this)" id="tab-quiz">🧠 Quiz</button>
+        <button class="tab" data-tab="toeic" onclick="switchTab('toeic', this)" id="tab-toeic">📘 TOEIC</button>
       </div>
 
       <!-- Tab: Word List -->
@@ -293,6 +294,66 @@
           <div class="result-buttons">
             <button class="btn btn-primary" onclick="startQuiz()">🔄 Làm lại</button>
             <button class="btn btn-outline" onclick="backToQuizStart()">← Quay lại</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: TOEIC -->
+      <div id="panel-toeic" class="tab-panel hidden">
+        <div id="toeic-start" class="quiz-start">
+          <div class="quiz-start-icon">📘</div>
+          <h2>Luyện thi TOEIC Reading</h2>
+          <p>Tạo đề thi tự động với AI theo cấp độ và chủ đề của bạn.</p>
+          
+          <div class="form-group" style="max-width: 300px; margin: 16px auto; text-align: left;">
+            <label style="color: var(--text-secondary); font-size: 12px; font-weight: 600;">Trình độ mục tiêu</label>
+            <select id="toeic-level">
+              <option value="450+">450+</option>
+              <option value="650+">650+</option>
+              <option value="850+">850+</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="max-width: 300px; margin: 16px auto; text-align: left;">
+            <label style="color: var(--text-secondary); font-size: 12px; font-weight: 600;">Phần thi</label>
+            <select id="toeic-part">
+              <option value="Part 5">Part 5 (Điền từ vào câu)</option>
+              <option value="Part 6">Part 6 (Điền từ vào đoạn văn)</option>
+              <option value="Part 7">Part 7 (Đọc hiểu đoạn văn)</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="max-width: 300px; margin: 16px auto; text-align: left;">
+            <label style="color: var(--text-secondary); font-size: 12px; font-weight: 600;">Chủ đề từ vựng</label>
+            <select id="toeic-category-select"></select>
+          </div>
+
+          <button class="btn btn-primary btn-lg" onclick="generateToeicTest()" id="btn-generate-toeic">✨ Tạo đề thi ngay</button>
+        </div>
+
+        <div id="toeic-area" class="quiz-area hidden" style="text-align: left; padding: 20px;">
+          <div class="quiz-header" style="margin-bottom: 20px;">
+            <div class="quiz-score-row" style="display: flex; justify-content: space-between; align-items: center;">
+              <h3 style="margin: 0; color: var(--primary);">Bài thi TOEIC</h3>
+              <button class="btn btn-danger-outline btn-sm" onclick="exitToeic()">🚪 Thoát</button>
+            </div>
+          </div>
+          
+          <div id="toeic-passage-container" class="card" style="margin-bottom: 20px; display: none; background-color: var(--surface); padding: 15px; border-radius: 8px;">
+            <h4 style="margin-top: 0; margin-bottom: 10px; color: var(--text-primary);">Đoạn văn</h4>
+            <div id="toeic-passage" style="white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);"></div>
+          </div>
+
+          <div id="toeic-questions-container"></div>
+          
+          <div id="toeic-vocabulary-container" class="card" style="margin-top: 20px; display: none; background-color: var(--surface); padding: 15px; border-radius: 8px;">
+            <h4 style="margin-top: 0; margin-bottom: 10px; color: var(--text-primary);">Từ vựng tham khảo</h4>
+            <ul id="toeic-vocabulary-list" style="padding-left: 20px; margin-bottom: 0; line-height: 1.6; color: var(--text-secondary);"></ul>
+          </div>
+
+          <div style="margin-top: 24px; display: flex; justify-content: center; gap: 12px; padding-bottom: 20px;">
+            <button class="btn btn-outline" onclick="exitToeic()">🚪 Thoát</button>
+            <button class="btn btn-primary" onclick="generateToeicTest()" id="btn-toeic-next">✨ Tiếp theo</button>
           </div>
         </div>
       </div>
